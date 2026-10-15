@@ -115,6 +115,7 @@ Multi-graph (one graph per analysed repo or live site), variable-length path que
 - Code graphs are built only from **public** GitHub repositories (the demo uses mealie, AGPL-3.0). Nothing private, login-protected, or paywalled is loaded.
 - Advisories come from the public [OSV.dev](https://osv.dev) API. Package versions from the repo's own lockfile.
 - Ownership uses public commit metadata. Commit emails are **not stored**: authors are keyed by a short one-way hash; only the display name is kept.
+- Live-app discovery reads only what a browser receives anonymously: the public OpenAPI document, GraphQL introspection if the server allows it, and the public JavaScript bundles. Nothing behind a login is fetched, no credentials are used, and endpoints are never probed unless the operator explicitly asserts authorization to the `probe_endpoints` tool. Only endpoint paths, methods, auth flags and parameter names are stored, never response data.
 
 ## Timeline
 

@@ -148,6 +148,7 @@ def _cached_get(url: str) -> dict:
     for attempt in range(3):
         r = httpx.get(url, timeout=60)
         if r.status_code == 200:
+            key.parent.mkdir(parents=True, exist_ok=True)
             key.write_text(r.text)
             return r.json()
         time.sleep(1 + attempt)

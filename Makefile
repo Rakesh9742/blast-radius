@@ -8,7 +8,8 @@ setup:            ## create venv + install deps
 	python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
 
 db:               ## start FalkorDB (ports 6379 + browser 3000)
-	docker compose up -d && sleep 2 && docker exec blast-radius-falkordb redis-cli ping
+	docker compose up -d 2>/dev/null || docker start blast-radius-falkordb >/dev/null
+	sleep 2 && docker exec blast-radius-falkordb redis-cli ping
 
 clone:            ## clone the target repo at the analysed release
 	@test -d $(REPO) || git clone -q --branch v3.0.0 https://github.com/mealie-recipes/mealie.git $(REPO)
