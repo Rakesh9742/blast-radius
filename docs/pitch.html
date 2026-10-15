@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blast Radius · hackathon briefing</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#0b0f17; --panel:#111827; --line:#1f2937; --text:#e5e7eb; --muted:#9aa5b8; --accent:#f97316; --ok:#22c55e; --bad:#ef4444; --fn:#60a5fa; --pkg:#fb923c; --ep:#34d399; --au:#c084fc; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width:960px; margin:0 auto; padding:40px 28px 80px; }
+  h1 { font-size:40px; margin:0 0 6px; letter-spacing:-.5px; } h1 span { color:var(--accent); }
+  .tag { color:var(--muted); font-size:18px; margin-bottom:28px; }
+  h2 { font-size:22px; margin:48px 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line); color:#fff; }
+  h3 { font-size:16px; margin:22px 0 8px; color:var(--accent); text-transform:uppercase; letter-spacing:.08em; }
+  p { margin:10px 0; } li { margin:6px 0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:14px 0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:14px; }
+  .kpi { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; } .kpi b { display:block; font-size:28px; color:#fff; } .kpi span { color:var(--muted); font-size:13px; }
+  .say { border-left:4px solid var(--accent); background:#1a1409; padding:12px 16px; border-radius:0 10px 10px 0; margin:12px 0; font-style:italic; } .say::before { content:"SAY: "; font-style:normal; font-weight:700; color:var(--accent); font-size:12px; letter-spacing:.1em; }
+  .do { border-left:4px solid var(--fn); background:#0e1626; padding:12px 16px; border-radius:0 10px 10px 0; margin:12px 0; } .do::before { content:"DO: "; font-weight:700; color:var(--fn); font-size:12px; letter-spacing:.1em; }
+  code { background:#1a2333; padding:2px 6px; border-radius:5px; font-size:14px; font-family:ui-monospace, Menlo, monospace; }
+  pre { background:#0f172a; border:1px solid var(--line); padding:14px; border-radius:10px; overflow:auto; font-size:13px; line-height:1.5; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; margin:10px 0; } td, th { border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top; } th { background:#0f172a; color:var(--muted); font-weight:600; }
+  .flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0; } .box { background:#0f172a; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:14px; } .box small { display:block; color:var(--muted); font-size:12px; } .arrow { color:var(--muted); font-size:20px; }
+  .n { display:inline-block; width:26px; height:26px; border-radius:50%; background:var(--accent); color:#111; font-weight:700; text-align:center; line-height:26px; margin-right:8px; font-size:14px; }
+  .time { color:var(--muted); font-size:13px; margin-left:8px; }
+  .check li { list-style:none; } .check li::before { content:"☐ "; color:var(--muted); }
+  .q { font-weight:600; color:#fff; } .a { color:var(--text); margin:4px 0 14px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:-1px; }
+  @media print { body { background:#fff; color:#111; } .card, .kpi, .box, pre { background:#f6f7f9; border-color:#ddd; } h1 span, h3 { color:#c2410c; } .say { background:#fff7ed; } .do { background:#eff6ff; } }
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>&#9673; Blast <span>Radius</span></h1>
+<div class="tag">Graph-native security triage. FalkorDB Graph Hacks, Track 1: Agents That Act on Connected Data.</div>
+
+<div class="card">
+  <b>One sentence:</b> Give it a vulnerability or a package, and the agent walks a FalkorDB graph of the codebase to tell you which HTTP endpoints can actually reach the vulnerable code, who owns that code, and then it fixes it: plans the version bump, verifies it with OSV, commits it on a branch, opens a pull request (or writes a report), and records the decision back on the graph.
+</div>
+
+<div class="grid">
+  <div class="kpi"><b>248</b><span>HTTP endpoints in the graph</span></div>
+  <div class="kpi"><b>1,251</b><span>functions, 2,886 call edges</span></div>
+  <div class="kpi"><b>329</b><span>real advisories (OSV) on 142 packages</span></div>
+  <div class="kpi"><b>~9 s</b><span>to build the whole graph in FalkorDB</span></div>
+  <div class="kpi"><b>14</b><span>agent tools, 9 are Cypher queries</span></div>
+  <div class="kpi"><b>&lt;60 s</b><span>from question to committed fix</span></div>
+</div>
+
+<h2>1. The problem (what to say first)</h2>
+<p>Every dependency scanner produces a list. For <b>mealie</b>, a popular open-source recipe app, the v3.0.0 lockfile has 142 packages and 329 published advisories. Pillow alone has 36. A list is not a decision. The engineer on call needs three answers the list cannot give:</p>
+<ol>
+  <li><b>Is it reachable?</b> Does our code call the vulnerable library at all, or is it only installed?</li>
+  <li><b>From where?</b> Which HTTP endpoints can an attacker use to reach that code?</li>
+  <li><b>Who fixes it, and to what version?</b></li>
+</ol>
+<div class="say">A scanner gives you a list. Triage is three graph questions: is it reachable, from where, and who owns it. So we made the graph the agent's brain.</div>
+
+<h2>2. How it works</h2>
+<h3>The pipeline</h3>
+<div class="flow">
+  <div class="box">GitHub repo<small>git clone mealie v3.0.0</small></div><span class="arrow">→</span>
+  <div class="box">Python parser<small>files, functions, calls, imports, FastAPI routes, Depends()</small></div><span class="arrow">→</span>
+  <div class="box">poetry.lock + OSV.dev<small>packages, dependency chain, advisories, fixed versions</small></div><span class="arrow">→</span>
+  <div class="box">git blame<small>who owns every function</small></div><span class="arrow">→</span>
+  <div class="box" style="border-color:var(--accent)"><b>FalkorDB</b><small>one graph, 13,900 nodes and edges</small></div><span class="arrow">→</span>
+  <div class="box">Claude agent<small>14 tools, every graph tool is Cypher</small></div><span class="arrow">→</span>
+  <div class="box">Web UI<small>chat · evidence graph · step trace</small></div>
+</div>
+
+<h3>The graph schema (memorise this line)</h3>
+<pre>Vulnerability -AFFECTS-> Package <-USES- Function <-CALLS*- Function(handler) -EXPOSES-> Endpoint
+Package -DEPENDS_ON-> Package          (transitive chain from poetry.lock)
+Author -OWNS {lines, share}-> Function (git blame)   ·   Author -AUTHORED-> Commit -MODIFIED-> File
+Vulnerability -TRIAGED-> Decision      (the agent writes its verdicts back: the graph is also its memory)</pre>
+
+<h3>The one query that replaces an afternoon</h3>
+<pre>MATCH (p:Package {name:'pillow'})<-[:USES]-(sink:Function)
+MATCH path = (h:Function)-[:CALLS*0..4]->(sink)
+MATCH (h)-[:EXPOSES]->(e:Endpoint)
+RETURN e.id, sink.qualname, [n IN nodes(path) | n.qualname], length(path)</pre>
+<p>Answer in under 200 ms: 8 endpoints out of 248 can reach Pillow, all through <code>PillowMinifier</code> in 2 to 5 hops. The other 240 never touch it. That is the blast radius.</p>
+
+<h3>The agent loop</h3>
+<p>Claude runs a tool-use loop. It picks tools, we run the Cypher, it reads the rows, repeats. Method it follows: <b>Identify → Reach → Owners → Fix → Act → Record</b>. The model only sees tool results, so every endpoint, owner, and version in its answer comes from the graph. The UI shows the exact queries next to the answer.</p>
+
+<table>
+  <tr><th>Tool</th><th>What it does</th></tr>
+  <tr><td><code>find_vulnerability</code>, <code>list_vulnerabilities</code>, <code>past_decisions</code></td><td>Pin the advisory, installed version, fixed version. Check if it was triaged before.</td></tr>
+  <tr><td><code>reachability</code></td><td>The multi-hop query above. Returns endpoints with path and a <b>confidence</b>: high if every call edge was resolved statically, medium if one was matched by method name only.</td></tr>
+  <tr><td><code>transitive_exposure</code></td><td><code>DEPENDS_ON*1..3</code>: explains why starlette matters even though nothing imports it (it is one hop behind fastapi).</td></tr>
+  <tr><td><code>who_owns</code>, <code>get_function</code>, <code>search_code</code>, <code>run_cypher</code></td><td>Owners from git blame, read the sink's source, full-text search, and a read-only Cypher escape hatch the model uses for questions we did not anticipate.</td></tr>
+  <tr><td><code>plan_fix</code>, <code>verify_fix</code></td><td>Lowest version that clears every advisory, cross-checked with PyPI, then asked OSV whether that version is clean.</td></tr>
+  <tr><td><code>apply_dependency_fix</code>, <code>open_pull_request</code></td><td>Git branch, edit <code>pyproject.toml</code>, commit, push and open a PR (or write a markdown report if GitHub is not configured).</td></tr>
+  <tr><td><code>record_triage_decision</code></td><td>Writes <code>(:Vulnerability)-[:TRIAGED]->(:Decision)</code> for every advisory assessed. Next week's question is answered from the graph.</td></tr>
+</table>
+
+<h2>3. Why this wins Track 1</h2>
+<table>
+  <tr><th>Judging criterion</th><th>Our answer</th><th>Where to point on screen</th></tr>
+  <tr><td><b>Multi-hop reasoning</b></td><td>Vulnerability → package → function → call chain (up to 4 hops) → endpoint, plus dependency chains and ownership. 5 to 7 hops per verdict.</td><td>The evidence graph: red diamonds → orange hexagon → blue functions → green endpoints.</td></tr>
+  <tr><td><b>Graph queries and algorithms as agent tools</b></td><td>9 of 20 tools are parameterised Cypher; 3 are FalkorDB graph algorithms: <code>algo.SPpaths</code> for the shortest attack path, <code>algo.betweenness</code> + <code>algo.pageRank</code> for choke points, <code>algo.BFS</code> for impact radius. The model chose <code>run_cypher</code> on its own to list 199 endpoints.</td><td>Click any step card on the right: the Cypher or algorithm call is there with its latency.</td></tr>
+  <tr><td><b>Tool selection through MCP</b></td><td>All 20 tools are served by our MCP server; the agent discovers the tool list from it and calls every tool over MCP. The same server plugs into Claude Desktop or Claude Code.</td><td>The "20 TOOLS VIA MCP" badge above the trace. Expand any step card: it shows <code>→ mcp.call_tool(name, args)</code> and <code>← result</code>. Full example log: <code>docs/example-tool-calls.md</code>.</td></tr>
+  <tr><td><b>Explainable results</b></td><td>Every answer sits next to the queries that produced it and the subgraph it touched. Confidence per path. Decisions persisted.</td><td>Phase bar, numbered steps, dashed edges = medium confidence.</td></tr>
+  <tr><td><b>Acts</b></td><td>Branch, commit, PR/report, verification against OSV, and write-back to the graph. Not a chatbot.</td><td>Steps 8 to 11 in the trace; the git log of the mealie clone.</td></tr>
+  <tr><td><b>Real data</b></td><td>Real codebase, real CVEs, real owners. Nothing synthetic.</td><td>Say it out loud. Most teams demo a toy CSV.</td></tr>
+</table>
+
+<h2>4. Demo run sheet (3 minutes)</h2>
+<div class="card">
+<p><span class="n">1</span><b>Problem</b><span class="time">0:00 – 0:30</span></p>
+<div class="do">Point at the four funnel tiles top-right: 329 advisories → 123 in packages the code calls → 30 high/critical reachable from an endpoint → triaged so far. Then the "Just dropped" feed under it.</div>
+<div class="say">This is mealie, a real open-source app. Its lockfile has 329 published advisories. Pillow alone has 36. Nobody can read that list. We need to know what is reachable, from where, and who fixes it.</div>
+
+<p><span class="n">2</span><b>The graph</b><span class="time">0:30 – 0:50</span></p>
+<div class="do">Point at the seeded evidence graph: orange package hubs with the blue functions that use them.</div>
+<div class="say">We parsed every function, call, import, route, package, advisory and git-blame owner into one FalkorDB graph. It builds in nine seconds. Every question from here is a Cypher query.</div>
+
+<p><span class="n">3</span><b>Live triage</b><span class="time">0:50 – 2:10</span></p>
+<div class="do">Click <b>Pillow image CVEs</b>. Narrate the phase bar and the numbered steps as they appear. Click the "Trace endpoints that reach pillow" card to show the Cypher.</div>
+<div class="say">Identify: it finds the advisories and checks whether this was triaged before. Reach: one variable-length path query says 8 of 248 endpoints can hit Pillow, all through the image minifier. Dashed edges mean the call was matched by name only, and the agent reports that as medium confidence instead of hiding it. Owners: git blame says Hayden wrote most of it, Michael Genson touched it last. Fix: 12.3.0 clears all 36 advisories, and OSV confirms it is clean. Act: it bumps pyproject on a branch and commits. Record: 7 advisories marked fix-proposed, 11 marked not reachable, with reasons, on the graph.</div>
+<div class="do">When the answer lands, the console narrates the attack path, then the full-screen <b>story</b> opens on its own: Question → Investigation (graph grows one step at a time with each Cypher query) → Attack path hop by hop → Verdict with actions. Let it autoplay, or press → to move faster. Press Esc to return, then open step 8 for the red/green diff and scroll to the EXPLOITABLE badge. The "Open full report" button gives judges a standalone HTML they can keep.</div>
+
+<p><span class="n">4</span><b>Act + memory</b><span class="time">2:10 – 2:35</span></p>
+<div class="do">Show the pull request on GitHub (or the report file). Back in the UI, point at the 4th funnel tile ("Triaged by the agent") that just went up, and at the feed item that now shows a green decision instead of a Triage button.</div>
+<div class="say">The fix is a real commit. And the decision lives in the graph, so the next engineer, or the agent next week, gets the answer without redoing the work. The graph is also the agent's memory.</div>
+
+<p><span class="n">5</span><b>Why FalkorDB, close</b><span class="time">2:35 – 3:00</span></p>
+<div class="say">Multi-hop reachability over 1,251 functions in under 200 milliseconds. Full-text and range indexes for the agent's lookups. Read-only query mode for its Cypher escape hatch. And write-back of decisions so the graph is both evidence and memory. Blast Radius: from advisory to committed fix, with every hop explained.</div>
+</div>
+
+<h3>If a judge says "try it on another repo"</h3>
+<div class="do">Paste a URL in the header. Pre-tested choices: <code>https://github.com/miguelgrinberg/microblog</code> (Flask, 109 advisories, 35 endpoints) · <code>https://github.com/gothinkster/node-express-realworld-example-app</code> (JavaScript/Express, 687 npm packages, 94 advisories, 20 endpoints) · <code>https://github.com/healthchecks/healthchecks</code> (Django, 147 endpoints, clean lockfile: the agent should say nothing is reachable) · <code>https://github.com/nsidnev/fastapi-realworld-example-app</code> (FastAPI, 150 advisories). The scenario buttons re-generate for the new repo. Also try the second box with <code>https://demo.mealie.io</code> to connect the live deployment.</div>
+<div class="say">It is not a canned demo. Give me any public Python repo.</div>
+
+<h3>Backup scenarios if asked for more</h3>
+<ul>
+  <li><b>python-multipart DoS</b>: agent drops 6 false-positive endpoints after reading their handlers, and finds the unauthenticated login form is the real target.</li>
+  <li><b>pyjwt</b>: reaches 199 of 248 endpoints via <code>get_current_user</code>, but the agent reads the code and shows 13 of 15 advisories need key handling mealie never does. Nuance judges love.</li>
+  <li><b>starlette</b>: nothing imports it, yet 7 handlers return <code>FileResponse</code>, exactly what the Range-header DoS attacks. Dependency chain explained.</li>
+</ul>
+
+<h2>5. Questions judges will ask</h2>
+<div class="card">
+<p class="q">How is this different from Snyk or Dependabot?</p><p class="a">They tell you a package is vulnerable. We tell you whether your code reaches it, through which endpoints, who owns it, and we open the fix. Reachability needs a call graph joined to the dependency graph joined to git history. That join is the graph.</p>
+<p class="q">Where is MCP in this?</p><p class="a">Every tool lives in an MCP server (agent/mcp_server.py). The agent does not hard-code a tool list: it connects over MCP, asks the server what tools exist, and Claude selects among them. Judges can point Claude Desktop at the same server and triage from there. The envelope each tool returns carries the Cypher it ran and the subgraph it touched, which is how the UI stays explainable across the process boundary.</p>
+<p class="q">Why a graph database and not SQL or a vector store?</p><p class="a">The core question is a variable-length path: endpoint to sink across an unknown number of calls. In Cypher that is <code>[:CALLS*0..4]</code>. In SQL it is a recursive CTE per question. A vector store cannot answer "is X reachable from Y" at all.</p>
+<p class="q">How accurate is the call graph?</p><p class="a">Static Python resolution is imperfect, so every call edge records how it was resolved. The agent reports high confidence when every edge was resolved statically and medium when one was matched by method name. It also reads the sink's source before deciding. We also resolve FastAPI dependency injection, which is how auth reaches every protected route.</p>
+<p class="q">Does it hallucinate endpoints or owners?</p><p class="a">The model only sees tool results, and the UI shows the queries. In our scenario tests every endpoint, owner and version in the answer appeared in a tool result.</p>
+<p class="q">What did FalkorDB specifically give you?</p><p class="a">Variable-length paths in milliseconds, multi-graph so each analysed repo is its own graph, full-text indexes on code and advisory text, read-only query mode for the agent's escape hatch, and write-back of decisions so the graph is also memory.</p>
+<p class="q">Can it look at my running app, not just the code?</p><p class="a">Yes. Paste the live URL in the header: it reads the OpenAPI document (following Swagger/Redoc pages), tries GraphQL introspection, scans the frontend bundles, and has Claude read the bundles' network-call code to extract endpoints assembled from constants and templates, then joins everything to the code graph. Endpoints become "confirmed deployed" with an auth flag, and routes that exist only in the deployment or only in the code are flagged as drift. On mealie's public demo: 271 live endpoints, 234 matched to code, 37 only deployed, 14 only in code. With your permission it can also send benign HEAD/GET/OPTIONS probes to confirm which endpoints answer without login.</p>
+<p class="q">Can it run on my repo?</p><p class="a">Yes, live, four ways: a GitHub URL (private with a token), a zip upload, a local folder path, or just the app URL for a surface-only map. Paste a public GitHub URL in the header box: it clones, parses, pulls advisories from OSV, runs git blame and loads a new FalkorDB graph with a progress panel, usually in 2 to 20 seconds for a mid-size Python project. Supported today: Python (FastAPI, Flask, Django, Django REST Framework) and JavaScript/TypeScript (Express, Next.js, NestJS) with lockfiles; ORM models become Table nodes so it can name the data at risk. Not yet: unpinned dependencies, Java/Go. The parser is per-language; the graph schema and the agent are not.</p>
+<p class="q">What about running the tests after the bump?</p><p class="a">Honest answer: not yet. The agent verifies the fix against OSV and commits it; CI runs the tests on the PR. A sandboxed test run is next.</p>
+</div>
+
+<h2>6. Rules compliance (check before submitting)</h2>
+<ul class="check">
+  <li>FalkorDB is the primary database and does the real work: reachability, algorithms, ownership joins, decisions. Remove it and nothing runs.</li>
+  <li>Track named at submission: <b>Agents That Act on Connected Data</b>.</li>
+  <li>Data: public repos only, public OSV API, commit emails hashed (no personal data stored).</li>
+  <li>Public repository created, README has setup + graph data model, <code>docs/queries.md</code> lists every Cypher query and algorithm.</li>
+  <li>Demo video recorded and linked. Local setup instructions complete (<code>make demo</code>).</li>
+  <li>AI assistant use disclosed in README (Claude Code).</li>
+  <li>You can explain the graph model, the queries, the architecture and the decisions: work through <code>docs/study-guide.md</code>.</li>
+  <li>Main coding work inside Oct 15 to 18 (see the plan agreed with the assistant).</li>
+</ul>
+
+<h2>7. Before the demo: checklist</h2>
+<ul class="check">
+  <li><code>docker compose up -d</code> and <code>make ingest</code> (fresh graph, clears old decisions so "nothing triaged before" is true)</li>
+  <li><code>make reset-repo</code> (mealie back to v3.0.0, no leftover branches)</li>
+  <li><code>make serve</code>, open <a href="http://localhost:8000">http://localhost:8000</a>, check the header shows "Claude connected"</li>
+  <li>Optional: <code>GITHUB_TOKEN</code> and <code>GITHUB_REPO</code> in <code>.env</code> so step 4 shows a real pull request</li>
+  <li>Do one dry run (about 60 seconds and 40 cents) so the first live run is not the first run of the day, then <code>make ingest</code> again if you want the "nothing triaged before" line to be true on camera</li>
+  <li>Alternative opener: click <b>Triage</b> on the newest item in the "Just dropped" feed instead of a scenario button. It feels live.</li>
+  <li>Hide bookmarks bar, 1600×900 window, zoom 100%</li>
+  <li>Have <code>git -C data/repos/mealie log --oneline -3</code> ready in a terminal for the "real commit" moment</li>
+</ul>
+
+<h2>8. Numbers to have in your head</h2>
+<table>
+  <tr><td>Target</td><td>mealie v3.0.0 (FastAPI, July 2025), 352 Python files, 1,251 functions, 248 endpoints</td></tr>
+  <tr><td>Dependencies</td><td>142 pinned packages, 167 dependency edges, 58 direct</td></tr>
+  <tr><td>Advisories</td><td>329 from OSV; 89 high or critical; pillow 36, pyjwt 31, authlib 20, python-multipart 14, starlette 14</td></tr>
+  <tr><td>Reachability</td><td>pillow 8 of 248 endpoints · python-multipart 11 incl. login · pyjwt 199 (every authenticated route) · starlette 8 via FileResponse</td></tr>
+  <tr><td>Speed</td><td>graph build ~9 s · reachability query &lt;200 ms · full triage with fix 30 to 60 s</td></tr>
+  <tr><td>Agent</td><td>Claude via tool use, 14 tools, 11 to 20 tool calls and 16 to 41 Cypher queries per triage</td></tr>
+</table>
+
+</div></body></html>

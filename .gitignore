@@ -1,0 +1,11 @@
+.venv/
+data/repos/
+data/cache/
+__pycache__/
+*.pyc
+.env
+work/
+data/reports/
+*.log
+.DS_Store
+node_modules/

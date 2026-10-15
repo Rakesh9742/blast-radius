@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blast Radius · graph-native security triage</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/vendor/marked.min.js"></script>
+<style>
+  :root { --bg:#0b0f17; --panel:#111827; --panel2:#0f172a; --line:#1f2937; --text:#e5e7eb; --muted:#8b95a7; --accent:#f97316; --accent2:#fb923c;
+          --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b; --fn:#60a5fa; --pkg:#fb923c; --ep:#34d399; --au:#c084fc; --dec:#2dd4bf; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #15213a 0%, var(--bg) 60%); color:var(--text); font:14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif; height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:14px; padding:8px 16px; flex-wrap:nowrap; border-bottom:1px solid var(--line); background:linear-gradient(90deg, #111827 0%, #0f1a2e 100%); }
+  header h1 { font-size:16px; margin:0; display:flex; align-items:center; gap:8px; } header h1 span { color:var(--accent); } header h1 small { color:var(--muted); font-weight:400; font-size:12.5px; margin-left:6px; white-space:nowrap; } @media (max-width:1700px) { header h1 small { display:none; } }
+  header .logo { width:14px; height:14px; border-radius:50%; border:3px solid var(--accent); box-shadow:0 0 0 3px rgba(249,115,22,.15), 0 0 18px rgba(249,115,22,.45); animation:breathe 3s ease-in-out infinite; }
+  @keyframes breathe { 0%,100% { box-shadow:0 0 0 3px rgba(249,115,22,.15), 0 0 10px rgba(249,115,22,.3) } 50% { box-shadow:0 0 0 5px rgba(249,115,22,.08), 0 0 26px rgba(249,115,22,.6) } }
+  .stats { margin-left:auto; display:flex; gap:6px; font-size:12px; color:var(--muted); white-space:nowrap; } .pill { padding:3px 9px; border-radius:999px; background:#1a2333; border:1px solid #233047; animation:fadeUp .5s ease both; white-space:nowrap; } .pill b { color:var(--text); font-weight:600; }
+  main { display:grid; grid-template-columns: 450px 1fr 360px; flex:1; min-height:0; }
+  section { min-height:0; display:flex; flex-direction:column; border-right:1px solid var(--line); } section:last-child { border-right:0; }
+  .title { padding:9px 14px; font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; min-height:38px; }
+  .title .right { text-transform:none; letter-spacing:0; display:flex; gap:6px; align-items:center; }
+  .scenarios { display:flex; flex-wrap:wrap; gap:6px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .scenarios button { background:#1a2333; color:var(--text); font-weight:500; padding:6px 11px; font-size:12px; border-radius:999px; border:1px solid #233047; transition:all .18s ease; }
+  .scenarios button:hover { border-color:var(--accent); transform:translateY(-1px); box-shadow:0 4px 14px rgba(249,115,22,.18); }
+  .phases { display:flex; gap:5px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  .phase { flex:1; text-align:center; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:6px 0; border-radius:6px; background:#121a28; border:1px solid transparent; transition:all .35s ease; }
+  .phase.active { color:#111; background:var(--accent); font-weight:700; box-shadow:0 0 0 2px rgba(249,115,22,.25), 0 0 18px rgba(249,115,22,.45); transform:translateY(-1px); }
+  .phase.done { color:var(--text); background:#1a2a3d; border-color:#2a3d57; } .phase.done::after { content:" ✓"; color:var(--ok); }
+  #chat { flex:1; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
+  .msg { padding:12px 14px; border-radius:12px; background:var(--panel); border:1px solid var(--line); font-size:13.5px; animation:fadeUp .4s ease both; min-width:0; }
+  .msg.user { background:var(--panel2); border-color:#2a3647; align-self:flex-end; max-width:92%; }
+  .msg.agent h1, .msg.agent h2, .msg.agent h3 { font-size:12px; margin:14px 0 6px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+  .msg.agent p { margin:6px 0; } .msg.agent ul, .msg.agent ol { padding-left:18px; margin:6px 0; } .msg.agent li { margin:3px 0; }
+  .msg.agent .tblwrap { overflow-x:auto; margin:8px 0; border:1px solid var(--line); border-radius:8px; background:var(--panel2); }
+  .msg.agent table { border-collapse:collapse; min-width:100%; font-size:12px; } .msg.agent td, .msg.agent th { border-bottom:1px solid var(--line); border-right:1px solid var(--line); padding:5px 8px; text-align:left; vertical-align:top; word-break:break-word; max-width:280px; }
+  .msg.agent td:last-child, .msg.agent th:last-child { border-right:0; } .msg.agent td:first-child { white-space:nowrap; } .msg.agent tr:last-child td { border-bottom:0; } .msg.agent th { color:var(--muted); font-weight:600; background:#0d1420; white-space:nowrap; position:sticky; top:0; }
+  .msg.agent code { background:#1a2333; padding:1px 5px; border-radius:4px; font-size:11.5px; font-family:ui-monospace, Menlo, monospace; word-break:break-all; } .msg.agent pre { overflow:auto; background:var(--panel2); padding:8px; border-radius:6px; }
+  .msg.agent pre code { word-break:normal; background:transparent; padding:0; }
+  .verdict { display:inline-block; font-weight:800; font-size:11px; letter-spacing:.12em; padding:4px 11px; border-radius:999px; margin-bottom:10px; animation:pop .5s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes pop { from { opacity:0; transform:scale(.6) } to { opacity:1; transform:none } }
+  .verdict.EXPLOITABLE { background:#3b1111; color:#fca5a5; box-shadow:0 0 16px rgba(239,68,68,.35); } .verdict.NOT_REACHABLE { background:#0f2a1a; color:#86efac; box-shadow:0 0 16px rgba(34,197,94,.3); } .verdict.NEEDS_REVIEW { background:#3a2a0a; color:#fcd34d; box-shadow:0 0 16px rgba(245,158,11,.3); }
+  .status { color:var(--muted); font-size:12.5px; display:flex; align-items:center; gap:10px; } .status .dot { width:8px; height:8px; border-radius:50%; background:var(--accent); flex:none; animation:pulse 1.2s infinite; box-shadow:0 0 10px var(--accent); }
+  .status .txt { transition:opacity .25s; } @keyframes pulse { 0%,100% { opacity:.35; transform:scale(.85) } 50% { opacity:1; transform:scale(1.1) } }
+  form { display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--line); } textarea { flex:1; resize:none; height:62px; background:var(--panel2); color:var(--text); border:1px solid #2a3647; border-radius:10px; padding:9px 11px; font:inherit; font-size:13px; transition:border-color .2s, box-shadow .2s; } textarea:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(249,115,22,.15); }
+  button { background:linear-gradient(180deg, var(--accent2), var(--accent)); color:#111; border:0; border-radius:10px; padding:0 18px; font-weight:700; cursor:pointer; font:inherit; transition:all .18s; } button:hover { box-shadow:0 6px 18px rgba(249,115,22,.35); transform:translateY(-1px); } button:disabled { opacity:.5; cursor:wait; transform:none; box-shadow:none; }
+  .ghost { background:#1a2333 !important; color:var(--text) !important; padding:3px 9px !important; font-size:11px !important; border:1px solid var(--line) !important; } .ghost:hover { border-color:var(--accent) !important; box-shadow:none !important; }
+  .cywrap { position:relative; flex:1; min-height:0; display:flex; flex-direction:column; background:radial-gradient(800px 500px at 50% 50%, rgba(30,41,59,.35), transparent 70%); }
+  #cy { flex:1; min-height:0; }
+  .legend { display:flex; gap:12px; font-size:11px; color:var(--muted); padding:7px 14px; border-top:1px solid var(--line); flex-wrap:wrap; align-items:center; } .legend i { display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  #nodeinfo { position:absolute; left:14px; bottom:14px; background:rgba(17,24,39,.96); border:1px solid #2a3647; border-radius:10px; padding:9px 12px; font-size:12px; max-width:440px; display:none; animation:fadeUp .25s ease both; backdrop-filter:blur(6px); } #nodeinfo b { color:var(--text); } #nodeinfo span { color:var(--muted); word-break:break-all; }
+  #trace { flex:1; overflow:auto; padding:10px 12px; scroll-behavior:smooth; }
+  .tool { border:1px solid var(--line); border-radius:12px; margin-bottom:8px; background:var(--panel); overflow:hidden; animation:fadeUp .4s ease both; transition:border-color .3s, box-shadow .3s; position:relative; }
+  .tool.running { border-color:rgba(249,115,22,.5); box-shadow:0 0 0 1px rgba(249,115,22,.15), 0 6px 20px rgba(249,115,22,.12); }
+  .tool.running::before { content:""; position:absolute; inset:0; background:linear-gradient(100deg, transparent 30%, rgba(249,115,22,.08) 50%, transparent 70%); background-size:200% 100%; animation:shimmer 1.4s linear infinite; pointer-events:none; }
+  @keyframes shimmer { from { background-position:200% 0 } to { background-position:-200% 0 } }
+  .tool .head { padding:9px 12px; display:flex; gap:10px; align-items:flex-start; cursor:pointer; position:relative; }
+  .tool .num { width:22px; height:22px; border-radius:50%; background:#1a2333; color:var(--muted); font-size:10.5px; display:flex; align-items:center; justify-content:center; flex:none; margin-top:1px; transition:all .3s; font-weight:700; }
+  .tool.running .num { background:var(--accent); color:#111; box-shadow:0 0 12px rgba(249,115,22,.6); } .tool.done .num { background:#163a2a; color:var(--ok); } .tool.error .num { background:var(--bad); color:#fff; }
+  .tool .ttl { font-weight:600; font-size:12.5px; } .tool .sum { color:var(--muted); font-size:12px; margin-top:2px; transition:opacity .3s; } .tool .ms { margin-left:auto; color:var(--muted); font-size:11px; white-space:nowrap; flex:none; }
+  .tool .body { display:grid; grid-template-rows:0fr; transition:grid-template-rows .3s ease; border-top:0 solid var(--line); background:var(--panel2); } .tool .body > div { overflow:hidden; min-height:0; }
+  .tool.open .body { grid-template-rows:1fr; border-top-width:1px; }
+  .step { padding:6px 12px 6px 44px; border-top:1px solid var(--line); font-size:11.5px; } .step:first-child { border-top:0; } .step .k { color:var(--muted); text-transform:uppercase; font-size:9.5px; letter-spacing:.08em; margin-right:6px; } .step .meta { color:var(--muted); float:right; }
+  .step pre { margin:4px 0 0; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace, Menlo, monospace; font-size:10.5px; color:#9fb3c8; background:transparent; }
+  .step.action { border-left:3px solid var(--ok); } .step.external { border-left:3px solid var(--pkg); }
+  .empty { color:var(--muted); padding:28px 20px; text-align:center; font-size:13px; line-height:1.7; animation:fadeUp .5s ease both; }
+  .usage { color:var(--muted); font-size:11px; padding:8px 14px; border-top:1px solid var(--line); display:flex; justify-content:space-between; }
+  .ov { animation:fadeUp .5s ease both; } .ov table { width:100%; border-collapse:collapse; font-size:12px; } .ov td { padding:6px 6px; border-bottom:1px solid var(--line); } .ov tr { transition:background .2s; } .ov tr:hover { background:#141d2d; } .ov td.n { text-align:right; color:var(--muted); white-space:nowrap; } .ov .hi { color:#fca5a5; } .ov .pkgname { font-weight:600; } .ov .ver { color:var(--muted); font-weight:400; }
+  .ov .bar { height:4px; background:#1a2333; border-radius:2px; margin-top:5px; overflow:hidden; } .ov .bar i { display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--accent2)); border-radius:2px; width:0; transition:width .9s cubic-bezier(.2,.8,.2,1); }
+  .funnel { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 10px; animation:fadeUp .5s ease both; position:relative; }
+  .tile .lbl { font-size:10.5px; color:var(--muted); letter-spacing:.02em; } .tile .val { font-size:22px; font-weight:600; color:#fff; line-height:1.15; margin-top:2px; } .tile .val small { font-size:11px; color:var(--muted); font-weight:400; margin-left:4px; }
+  .tile .meter { height:4px; border-radius:2px; background:#3a2410; margin-top:7px; overflow:hidden; } .tile .meter i { display:block; height:100%; width:0; background:var(--accent); border-radius:2px; transition:width 1s cubic-bezier(.2,.8,.2,1); }
+  .tile.good .meter { background:#0f2a1a; } .tile.good .meter i { background:var(--ok); }
+  .tile .stepn { position:absolute; top:6px; right:8px; font-size:9.5px; color:var(--muted); }
+  .feed h4 { margin:14px 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); }
+  .adv { display:flex; align-items:center; gap:8px; padding:7px 8px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; background:var(--panel); animation:fadeUp .4s ease both; transition:border-color .2s; } .adv:hover { border-color:#2a3d57; }
+  .adv .sev { font-size:9px; font-weight:700; letter-spacing:.08em; padding:2px 6px; border-radius:4px; flex:none; } .sev.CRITICAL, .sev.HIGH { background:#3b1111; color:#fca5a5; } .sev.MODERATE { background:#3a2a0a; color:#fcd34d; } .sev.LOW, .sev.UNKNOWN { background:#1a2333; color:var(--muted); }
+  .adv .txt { min-width:0; flex:1; font-size:11.5px; line-height:1.35; } .adv .txt b { display:block; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .adv .txt span { color:var(--muted); }
+  .adv button { padding:4px 9px; font-size:11px; border-radius:6px; flex:none; } .adv .done { color:var(--ok); font-size:11px; flex:none; }
+  .diff { margin:6px 12px 10px 44px; background:#0a0f1a; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:ui-monospace, Menlo, monospace; font-size:11px; line-height:1.5; overflow:auto; white-space:pre; }
+  .diff .add { color:#86efac; background:rgba(34,197,94,.08); display:block; } .diff .del { color:#fca5a5; background:rgba(239,68,68,.08); display:block; } .diff .hunk { color:var(--muted); display:block; }
+  #caption { position:absolute; left:50%; bottom:18px; transform:translateX(-50%); min-width:420px; max-width:80%; background:rgba(11,15,23,.92); border:1px solid #2a3647; border-radius:14px; padding:12px 18px; display:none; backdrop-filter:blur(8px); box-shadow:0 10px 40px rgba(0,0,0,.5), 0 0 0 1px rgba(249,115,22,.15); }
+  #caption.show { display:block; animation:fadeUp .3s ease both; } #caption .hopn { font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700; display:flex; justify-content:space-between; }
+  #caption .hopt { font-size:15px; color:#fff; font-weight:600; margin-top:3px; animation:fadeUp .35s ease both; } #caption .hops { font-size:12.5px; color:var(--muted); margin-top:2px; animation:fadeUp .45s ease both; }
+  #caption .dots { display:flex; gap:5px; margin-top:9px; } #caption .dots i { flex:1; height:3px; border-radius:2px; background:#1f2937; transition:background .3s; } #caption .dots i.on { background:var(--accent); box-shadow:0 0 8px var(--accent); }
+  .reportbtn { display:inline-flex; align-items:center; gap:6px; margin:0 0 10px 10px; padding:5px 12px; border-radius:999px; font-size:12px; font-weight:600; background:#1a2333; color:var(--text); border:1px solid #2a3d57; text-decoration:none; transition:all .2s; vertical-align:top; animation:pop .5s .3s cubic-bezier(.2,1.4,.4,1) both; }
+  .reportbtn:hover { border-color:var(--accent); box-shadow:0 4px 14px rgba(249,115,22,.25); transform:translateY(-1px); }
+  #story { position:fixed; inset:0; z-index:50; background:#070a12; display:none; animation:fadeIn .5s ease both; } #story.show { display:block; } #story iframe { width:100%; height:100%; border:0; }
+  #story .close { position:absolute; top:12px; right:14px; z-index:51; background:rgba(26,35,51,.85); color:var(--text); border:1px solid #2a3d57; border-radius:10px; padding:8px 14px; font-weight:600; backdrop-filter:blur(6px); }
+  #story .close:hover { border-color:var(--accent); } @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
+  .repo { display:flex; gap:8px; align-items:center; margin-left:18px; } .repo select { background:#1a2333; color:var(--text); border:1px solid #233047; border-radius:999px; padding:5px 10px; font:inherit; font-size:12px; max-width:200px; }
+  .repo form { display:flex; gap:6px; padding:0; border:0; } .repo input { width:210px; background:var(--panel2); color:var(--text); border:1px solid #2a3647; border-radius:999px; padding:5px 12px; font:inherit; font-size:12px; transition:all .2s; } .repo input:focus { outline:none; border-color:var(--accent); width:300px; box-shadow:0 0 0 3px rgba(249,115,22,.15); }
+  #ingest { position:fixed; inset:0; z-index:60; background:rgba(7,10,18,.82); backdrop-filter:blur(8px); display:none; align-items:center; justify-content:center; animation:fadeIn .3s ease both; } #ingest.show { display:flex; }
+  #ingest .box { width:560px; background:var(--panel); border:1px solid #2a3647; border-radius:18px; padding:24px 28px; box-shadow:0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(249,115,22,.15); animation:up .4s ease both; }
+  #ingest .k { font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; } #ingest h3 { margin:6px 0 12px; font-size:19px; color:#fff; }
+  #ingest ul { list-style:none; margin:0; padding:0; max-height:260px; overflow:auto; } #ingest li { padding:5px 0; font-size:13px; color:var(--muted); border-bottom:1px solid var(--line); animation:fadeUp .3s ease both; display:flex; gap:8px; } #ingest li.stage { color:var(--text); font-weight:600; } #ingest li.stage::before { content:"●"; color:var(--accent); } #ingest li.detail { padding-left:18px; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; }
+  #ingest .bar { height:4px; background:#1a2333; border-radius:2px; margin-top:14px; overflow:hidden; } #ingest .bar i { display:block; height:100%; width:0; background:linear-gradient(90deg, var(--accent), var(--accent2)); transition:width .6s ease; }
+  #ingest #ingestFoot { margin-top:12px; font-size:12.5px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; } #ingest .err { color:#fca5a5; }
+  @keyframes up { from { opacity:0; transform:translateY(16px) } to { opacity:1; transform:none } }
+  .call { margin:6px 12px 8px 44px; border:1px solid var(--line); border-radius:8px; background:#0a0f1a; font-family:ui-monospace, Menlo, monospace; font-size:11px; line-height:1.5; overflow:hidden; }
+  .call .ln { padding:5px 10px; white-space:pre-wrap; word-break:break-word; } .call .req { color:#c7d2fe; border-bottom:1px solid var(--line); } .call .req b { color:#a5b4fc; font-weight:600; } .call .res { color:#9fb3c8; max-height:150px; overflow:auto; } .call .res b { color:#6ee7b7; font-weight:600; }
+  .livecard { border:1px solid #1f3a2e; background:linear-gradient(180deg, #0f2a1a33, transparent); border-radius:10px; padding:10px 12px; margin:0 0 10px; font-size:12px; animation:fadeUp .4s ease both; }
+  .livecard .h { display:flex; justify-content:space-between; align-items:center; font-weight:600; color:#d1fae5; } .livecard .h i { width:8px; height:8px; border-radius:50%; background:var(--ok); display:inline-block; margin-right:6px; box-shadow:0 0 8px var(--ok); animation:pulse 1.6s infinite; }
+  .livecard .row { display:flex; gap:10px; margin-top:6px; color:var(--muted); flex-wrap:wrap; } .livecard .row b { color:var(--text); }
+  .livecard .warn { color:#fcd34d; }
+  #epcard { position:absolute; top:44px; right:12px; width:360px; max-height:calc(100% - 60px); overflow:auto; background:rgba(13,18,28,.96); border:1px solid #233047; border-radius:12px; padding:12px 14px; z-index:30; display:none; box-shadow:0 12px 40px rgba(0,0,0,.5); animation:fadeUp .25s ease both; font-size:12.5px; }
+  #epcard .m { display:inline-block; font-weight:700; font-size:11px; padding:2px 7px; border-radius:6px; background:#1a2333; color:#93c5fd; margin-right:6px; }
+  #epcard h3 { margin:0 0 6px; font-size:13px; word-break:break-all; color:#e5e7eb; }
+  #epcard .url { font-family:ui-monospace,Menlo,monospace; font-size:11.5px; background:#0b0f17; padding:6px 8px; border-radius:6px; word-break:break-all; color:#a5f3fc; margin:6px 0; cursor:copy; }
+  #epcard .row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
+  #epcard .pill { font-size:11px; padding:2px 8px; border-radius:999px; background:#1a2333; color:#cbd5e1; }
+  #epcard .pill.bad { background:rgba(239,68,68,.18); color:#fca5a5; } #epcard .pill.warn { background:rgba(245,158,11,.18); color:#fcd34d; } #epcard .pill.good { background:rgba(52,211,153,.15); color:#6ee7b7; }
+  #epcard .sec { margin-top:8px; } #epcard .sec b { display:block; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+  #epcard code { font-family:ui-monospace,Menlo,monospace; font-size:11px; background:#0b0f17; padding:1px 5px; border-radius:4px; color:#e2e8f0; }
+  #epcard ul { margin:0; padding-left:16px; } #epcard li { margin:1px 0; }
+  #epcard .x { position:absolute; top:8px; right:10px; cursor:pointer; color:var(--muted); font-size:16px; }
+  #epcard button.ask { margin-top:10px; width:100%; }
+  .livecard .bad { color:#fca5a5; } .livecard .bad b { color:#f87171; }
+  .msg .attn { border-left:3px solid #ef4444; background:rgba(239,68,68,.10); padding:4px 8px; margin:4px 0; border-radius:4px; color:#fecaca; }
+  .msg tr.attn td { background:rgba(239,68,68,.12); color:#fecaca; }
+  .warnpill { background:#3b1111; color:#fca5a5; border-color:#5b1a1a; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="logo"></span> Blast <span>Radius</span> <small>graph-native security triage on FalkorDB</small></h1>
+  <div class="repo" id="repo"><select id="graphsel" title="switch analysed repo"></select><form id="analyze"><input id="repourl" placeholder="GitHub repo URL, app URL, or local folder → build the graph" spellcheck="false"><button type="submit" class="ghost" style="font-size:12px !important;padding:6px 12px !important">Analyze</button><button type="button" class="ghost" id="uploadbtn" title="upload a zip of a repository" style="font-size:12px !important;padding:6px 10px !important">⬆ zip</button><input type="file" id="zipfile" accept=".zip" style="display:none"></form>
+  <form id="connect"><input id="liveurl" placeholder="live app URL → confirm deployed endpoints" spellcheck="false"><button type="submit" class="ghost" style="font-size:12px !important;padding:6px 12px !important">Connect</button></form></div>
+  <div class="stats" id="stats"></div>
+</header>
+<div id="ingest"><div class="box"><div class="k">building graph</div><h3 id="ingestTitle">…</h3><ul id="ingestLog"></ul><div class="bar"><i id="ingestBar"></i></div><div id="ingestFoot"></div></div></div>
+<div id="story"><iframe id="storyFrame" title="replay"></iframe></div>
+<main>
+  <section>
+    <div class="title">Triage agent <span id="target" style="color:var(--accent);font-weight:600;letter-spacing:0;text-transform:none;margin-left:6px"></span></div>
+    <div class="scenarios" id="scenarios"></div>
+    <div class="phases" id="phases">
+      <div class="phase" data-p="identify">Identify</div><div class="phase" data-p="reach">Reach</div><div class="phase" data-p="owners">Owners</div><div class="phase" data-p="fix">Fix</div><div class="phase" data-p="act">Act</div><div class="phase" data-p="record">Record</div>
+    </div>
+    <div id="chat"><div class="empty">Pick a scenario or ask about a CVE, an advisory id, or a package.<br>The agent walks the code graph and shows every hop it took.</div></div>
+    <form id="form"><textarea id="prompt" placeholder="e.g. Pillow has new CVEs. Which endpoints are exposed, who owns the code, and fix it."></textarea><button id="send">Run</button></form>
+  </section>
+  <section>
+    <div class="title">Evidence graph <span class="right"><span id="gcount" style="color:var(--muted)"></span><button class="ghost" id="replay" title="open the step-by-step replay in a new window">▶ replay path</button><button class="ghost" id="fit">fit</button><button class="ghost" id="clear">clear</button></span></div>
+    <div class="cywrap"><div id="cy"></div><div id="epcard"><span class="x" onclick="document.getElementById('epcard').style.display='none'">×</span><div id="epbody"></div></div><div id="nodeinfo"></div><div id="caption"></div></div>
+    <div class="legend"><span><i style="background:var(--bad)"></i>Vulnerability</span><span><i style="background:var(--pkg)"></i>Package</span><span><i style="background:var(--fn)"></i>Function</span><span><i style="background:var(--ep)"></i>Endpoint</span><span><i style="background:var(--au)"></i>Author</span><span><i style="background:var(--dec)"></i>Decision</span><span><i style="background:#f472b6"></i>Table</span><span style="margin-left:auto">zoom in or hover to read endpoint names · click an endpoint for details · double-click to expand · dashed edge = name-matched call (medium confidence)</span></div>
+  </section>
+  <section>
+    <div class="title">How it got there <span class="right"><span id="mcpbadge" style="display:none;background:#1a2333;border:1px solid #2a3d57;border-radius:999px;padding:2px 8px;font-size:10px;letter-spacing:.08em;color:#c7d2fe">20 TOOLS VIA MCP</span><span id="stepcount"></span></span></div>
+    <div class="funnel" id="funnel"></div>
+    <div id="trace"><div class="ov" id="overview"></div></div>
+    <div class="usage"><span id="usage"></span><span id="elapsed"></span></div>
+  </section>
+</main>
+<script>
+const COLORS = { Vulnerability:'#ef4444', Package:'#fb923c', Function:'#60a5fa', Entrypoint:'#34d399', Author:'#c084fc', Decision:'#2dd4bf', Table:'#f472b6', File:'#94a3b8', Class:'#94a3b8', Commit:'#94a3b8', Repo:'#94a3b8' };
+const MEALIE_SCENARIOS = [
+  ['Pillow image CVEs', 'Pillow (PIL) has new vulnerabilities in our lockfile. Which of our HTTP endpoints are actually exposed through image handling, who owns that code, and apply the fix.'],
+  ['python-multipart DoS', 'python-multipart has a denial-of-service vulnerability. Which endpoints accept uploads or forms and are therefore exposed? Who owns them?'],
+  ['pyjwt auth paths', 'Is the pyjwt vulnerability reachable in our authentication flow? Show the path from the login endpoints to the jwt calls and tell me the owners.'],
+  ['starlette (transitive)', 'We do not import starlette directly. Are the starlette vulnerabilities still a problem for us? Explain the dependency chain.'],
+  ['Prioritise everything', 'Give me a prioritized overview: which vulnerable packages are actually used by our code, ranked by reachable endpoints.'],
+];
+let SCENARIOS = MEALIE_SCENARIOS.slice();
+function buildScenarios(graphName, packages, live) {
+  if (graphName === 'mealie') SCENARIOS = MEALIE_SCENARIOS.slice();
+  else if (live && live.kind === 'live-only') {
+    const host = (live.url || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const areas = (live.areas || []).filter(a => a.area && a.area !== '/');
+    SCENARIOS = [['Map the API surface', `This graph was built from the live frontend of ${host} only. Map its API surface: group the confirmed API calls by area, infer what each area does from its paths and payload fields, and say how many calls in each are public, require login or are unknown. Finish with what connecting the backend source repository would add.`]];
+    if (live.live_unauth || live.auth_unknown) SCENARIOS.push(['Public and unknown-auth calls', `Which confirmed API calls of ${host} can be reached without login, and which have an unknown auth status? Infer what each does from its path and payload fields, and rank which deserve a manual check first. Do not probe anything.`]);
+    areas.slice(0, 3).forEach(a => SCENARIOS.push([`${a.area} API (${a.calls})`, `Explain the ${a.area} area of the ${host} API: list its ${a.calls} confirmed calls with method and auth status, infer what each does from its path and payload fields, point out the ${a.writes} calls that change data, and flag anything that deserves a manual check.`]));
+    SCENARIOS.push(['Data-changing calls', `List every confirmed POST, PUT, PATCH and DELETE call of ${host} with its auth status and known payload fields. Which ones could change or delete important data, and which of those have a public or unknown auth status?`]);
+  }
+  else {
+    const top = packages.filter(p => p.used > 0 && p.vulns > 0).slice(0, 4);
+    SCENARIOS = top.map(p => [`${p.package} advisories`, `${p.package} ${p.version} in our lockfile has ${p.vulns} published advisories. Which of our HTTP endpoints are actually exposed, who owns that code, and apply the fix.`]);
+    SCENARIOS.push(['Prioritise everything', 'Give me a prioritized overview: which vulnerable packages are actually used by our code, ranked by reachable endpoints.']);
+  }
+  const box = document.getElementById('scenarios'); box.innerHTML = '';
+  SCENARIOS.forEach(([label, p], i) => { const b = document.createElement('button'); b.textContent = label; b.style.animation = `fadeUp .4s ease ${i * 60}ms both`; b.onclick = () => run(p); box.appendChild(b); });
+}
+const cy = cytoscape({ container: document.getElementById('cy'), maxZoom: 1.6, minZoom: 0.15, wheelSensitivity: .25,
+  style: [
+    { selector: 'node', style: { 'background-color': e => COLORS[e.data('label')] || '#94a3b8', label: 'data(name)', color: '#cbd5e1', 'font-size': 9, 'text-wrap': 'ellipsis', 'text-max-width': 120, 'min-zoomed-font-size': 6.5, 'text-valign': 'bottom', 'text-margin-y': 3, width: 18, height: 18, 'border-width': 1, 'border-color': '#0b0f17',
+        'transition-property': 'border-width, border-color, width, height', 'transition-duration': '0.3s' } },
+    { selector: 'node[label="Entrypoint"]', style: { shape: 'round-rectangle', width: 28, height: 16, 'font-size': 9.5, color: '#d1fae5', 'text-max-width': 110, 'text-background-color': '#0b0f17', 'text-background-opacity': .55, 'text-background-padding': 1 } },
+    { selector: 'node.small', style: { 'font-size': 8.5, 'text-max-width': 95 } },
+    { selector: 'node[attn="public"]', style: { 'min-zoomed-font-size': 0, 'background-color': '#ef4444', 'border-width': 3, 'border-color': '#fecaca', label: 'data(name)', color: '#fecaca', 'font-size': 10.5, 'font-weight': 700, 'z-index': 50 } },
+    { selector: 'node[attn="unknown"]', style: { 'min-zoomed-font-size': 0, 'background-color': '#f59e0b', 'border-width': 3, 'border-color': '#fde68a', label: 'data(name)', color: '#fde68a', 'font-size': 10.5, 'font-weight': 700, 'z-index': 50 } },
+    { selector: 'node[label="Vulnerability"]', style: { shape: 'diamond', width: 18, height: 18, 'font-size': 7.5, color: '#94a3b8' } },
+    { selector: 'node[label="Package"]', style: { shape: 'hexagon', width: 32, height: 32, 'font-size': 13, 'font-weight': 700, color: '#fed7aa', 'min-zoomed-font-size': 0, 'text-background-color': '#0b0f17', 'text-background-opacity': .6, 'text-background-padding': 2 } },
+    { selector: 'node.hover', style: { 'min-zoomed-font-size': 0, label: 'data(name)', 'font-size': 12, color: '#fff', 'z-index': 98, 'text-background-color': '#0b0f17', 'text-background-opacity': .85, 'text-background-padding': 3 } },
+    { selector: 'node[label="Author"]', style: { shape: 'ellipse', width: 22, height: 22, color: '#e9d5ff' } },
+    { selector: 'node[label="Decision"]', style: { shape: 'tag', width: 22, height: 16, 'font-size': 7.5 } },
+    { selector: 'edge', style: { width: 1.2, 'line-color': '#334155', 'target-arrow-color': '#334155', 'target-arrow-shape': 'triangle', 'arrow-scale': .7, 'curve-style': 'bezier', 'transition-property': 'line-color, width', 'transition-duration': '0.4s' } },
+    { selector: 'edge[type="CALLS"], edge[type="EXPOSES"]', style: { 'line-color': '#3b82f6', 'target-arrow-color': '#3b82f6', width: 1.6 } },
+    { selector: 'edge[type="USES"], edge[type="DEPENDS_ON"]', style: { 'line-color': '#f97316', 'target-arrow-color': '#f97316' } },
+    { selector: 'edge[type="OWNS"]', style: { 'line-color': '#7c3aed', 'target-arrow-color': '#7c3aed', 'line-style': 'dotted' } },
+    { selector: 'edge[confidence="medium"]', style: { 'line-style': 'dashed' } },
+    { selector: 'node.quiet', style: { label: '' } },
+    { selector: '.dim', style: { opacity: .12 } },
+    { selector: 'node.hot', style: { 'min-zoomed-font-size': 0, opacity: 1, 'border-width': 5, 'border-color': '#fff', label: 'data(name)', 'font-size': 11, color: '#fff', 'z-index': 99, 'text-background-color': '#0b0f17', 'text-background-opacity': .8, 'text-background-padding': 2 } },
+    { selector: 'edge.hot', style: { opacity: 1, width: 4, 'line-color': '#fb923c', 'target-arrow-color': '#fb923c', 'z-index': 99 } },
+    { selector: '.fresh', style: { 'border-width': 4, 'border-color': '#f97316' } },
+    { selector: 'edge.fresh', style: { width: 3, 'line-color': '#fb923c', 'target-arrow-color': '#fb923c' } },
+    { selector: ':selected', style: { 'border-width': 3, 'border-color': '#fff' } },
+  ]});
+let layoutTimer;
+function addGraph(frag, animate = true) {
+  if (!frag) return;
+  cy.elements().removeClass('fresh');
+  const added = [];
+  (frag.nodes || []).forEach(n => { if (!cy.getElementById(n.id).length) added.push(cy.add({ group: 'nodes', data: { ...n } })); });
+  (frag.edges || []).forEach(e => { const id = `${e.source}|${e.type}|${e.target}`; if (!cy.getElementById(id).length && cy.getElementById(e.source).length && cy.getElementById(e.target).length) added.push(cy.add({ group: 'edges', data: { id, ...e } })); });
+  added.forEach(el => { el.addClass('fresh'); if (animate) { el.style('opacity', 0); el.animate({ style: { opacity: 1 } }, { duration: 500, easing: 'ease-out' }); } });
+  document.getElementById('gcount').textContent = `${cy.nodes().length} nodes · ${cy.edges().length} edges`;
+  const n = cy.nodes().length, dense = n > 70;
+  cy.nodes('[label="Function"], [label="Vulnerability"]').toggleClass('quiet', dense);
+  // very dense graphs: endpoint labels only on hover, except flagged ones; mid-size graphs: smaller labels
+  cy.nodes('[label="Entrypoint"]').filter(x => !x.data('attn')).toggleClass('quiet', n > 110);
+  cy.nodes().toggleClass('small', n > 45);
+  clearTimeout(layoutTimer);
+  // labels count as part of the node size so the layout keeps them from colliding; spacing grows with the graph
+  layoutTimer = setTimeout(() => cy.layout({ name: 'cose', animate: animate ? 'end' : false, animationDuration: 600, animationEasing: 'ease-out', nodeDimensionsIncludeLabels: true,
+    nodeRepulsion: n > 60 ? 26000 : 18000, idealEdgeLength: n > 60 ? 105 : 90, nodeOverlap: 16, gravity: 0.5, numIter: 1200, padding: 24, randomize: false }).run(), 80);
+  setTimeout(() => cy.elements().removeClass('fresh'), 2500);
+}
+const nodeinfo = document.getElementById('nodeinfo');
+let pinnedInfo = false;
+cy.on('mouseover', 'node', ev => { const n = ev.target; n.removeClass('quiet').addClass('hover'); if (pinnedInfo) return; const d = n.data(), p = n.renderedPosition(), w = cy.width();
+  nodeinfo.style.display = 'block'; nodeinfo.style.left = Math.min(p.x + 14, w - 300) + 'px'; nodeinfo.style.top = Math.max(8, p.y - 10) + 'px'; nodeinfo.style.right = 'auto'; nodeinfo.style.bottom = 'auto';
+  nodeinfo.innerHTML = `<b>${esc(d.label === 'Package' && String(d.id).startsWith('area:') ? 'API area' : d.label)}</b> <span>${esc(d.name)}</span>${d.attn === 'public' ? '<br><span style="color:#fca5a5">🔴 callable without login</span>' : d.attn === 'unknown' ? '<br><span style="color:#fcd34d">⚠ auth status unknown</span>' : ''}${d.label === 'Entrypoint' ? '<br><span style="color:var(--muted)">click for details</span>' : ''}`; });
+cy.on('mouseout', 'node', ev => { ev.target.removeClass('hover'); if (!pinnedInfo) nodeinfo.style.display = 'none'; });
+document.getElementById('cy').addEventListener('mouseleave', () => { cy.nodes('.hover').removeClass('hover'); if (!pinnedInfo) nodeinfo.style.display = 'none'; });
+cy.on('tap', 'node[label="Entrypoint"]', ev => showEndpoint(ev.target.data().id));
+cy.on('tap', 'node', ev => { const d = ev.target.data(); if (d.label === 'Entrypoint') return; pinnedInfo = true; nodeinfo.style.display = 'block'; nodeinfo.innerHTML = `<b>${esc(d.label)}</b> <span>${esc(d.id)}</span>${d.file ? `<br><span>${esc(d.file)}</span>` : ''}${d.severity ? `<br><span>severity ${esc(d.severity)}</span>` : ''}`; });
+cy.on('tap', ev => { if (ev.target === cy) { pinnedInfo = false; nodeinfo.style.display = 'none'; document.getElementById('epcard').style.display = 'none'; } });
+cy.on('dbltap', 'node', async ev => { const d = ev.target.data(); const r = await fetch(`/api/graph/neighborhood?id=${encodeURIComponent(d.id)}&label=${d.label}`); addGraph(await r.json()); });
+document.getElementById('fit').onclick = () => cy.animate({ fit: { eles: cy.elements(), padding: 24 }, duration: 400 });
+document.getElementById('clear').onclick = () => { cy.elements().remove(); document.getElementById('gcount').textContent = ''; };
+
+function fmtTile(lbl, val, total, n, cls = '') { return `<div class="tile ${cls}" style="animation-delay:${n * 80}ms"><span class="stepn">${n + 1}</span><div class="lbl">${lbl}</div><div class="val">${val.toLocaleString()}${total ? `<small>of ${total.toLocaleString()}</small>` : ''}</div><div class="meter"><i data-w="${total ? Math.max(2, Math.round(100 * val / total)) : (val ? 100 : 0)}"></i></div></div>`; }
+async function loadFunnel() {
+  const f = await (await fetch('/api/funnel')).json();
+  document.getElementById('funnel').innerHTML = fmtTile('Advisories in lockfile', f.advisories, 0, 0) + fmtTile('In packages the code calls', f.in_used_packages, f.advisories, 1) +
+    fmtTile('High/critical reachable from an endpoint', f.reachable_high, f.advisories, 2) + fmtTile('Triaged by the agent, on the graph', f.triaged, f.in_used_packages, 3, 'good');
+  requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('.funnel .meter i').forEach(b => b.style.width = b.dataset.w + '%'), 60));
+}
+async function loadFeed(container) {
+  const r = await (await fetch('/api/feed?limit=6')).json();
+  container.innerHTML = `<h4>Just dropped · newest advisories on packages this code uses</h4>` + r.items.map((a, i) => `<div class="adv" style="animation-delay:${i * 60}ms"><span class="sev ${esc(a.severity)}">${esc(a.severity)}</span><div class="txt"><b>${esc(a.package)} ${esc(a.installed)} · ${esc(a.cve || a.id)}</b><span>${esc(a.published)} · ${esc(a.summary)}</span></div>${a.decision ? `<span class="done">✓ ${esc(a.decision)}</span>` : `<button data-id="${esc(a.id)}" data-pkg="${esc(a.package)}">Triage</button>`}</div>`).join('');
+  container.querySelectorAll('button').forEach(b => b.onclick = () => run(`${b.dataset.id} was just published for ${b.dataset.pkg}. Is it reachable from any of our endpoints, who owns that code, and fix it.`));
+}
+let replayTimers = [];
+function narrate(i, total, title, sub, kind = 'attack path · hop', endWord = 'reached', midWord = 'tracing…') {
+  const c = document.getElementById('caption'); c.classList.add('show');
+  c.innerHTML = `<div class="hopn"><span>${kind} ${i + 1} of ${total}</span><span>${i + 1 === total ? endWord : midWord}</span></div><div class="hopt">${esc(title)}</div><div class="hops">${esc(sub)}</div><div class="dots">${Array.from({ length: total }, (_, k) => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}</div>`;
+}
+function replayPath() {
+  replayTimers.forEach(clearTimeout); replayTimers = [];
+  const eps = cy.nodes('[label="Entrypoint"]'), targets = cy.nodes('[label="Package"]').filter(n => !String(n.id()).startsWith('area:'));
+  if (!cy.nodes('[label="Vulnerability"]').length) { replaySurface(); return; }   // no vulnerability on the graph: tour the API surface instead
+  if (!eps.length || !targets.length) return;
+  let best = null;
+  eps.forEach(ep => { const d = cy.elements().dijkstra({ root: ep, directed: false }); targets.forEach(t => { const dist = d.distanceTo(t); if (isFinite(dist) && (!best || dist < best.dist)) best = { dist, path: d.pathTo(t) }; }); });
+  if (!best) return;
+  const vulns = best.path.nodes().last().connectedEdges().connectedNodes('[label="Vulnerability"]'); const vuln = vulns.filter('[severity="CRITICAL"]').first().length ? vulns.filter('[severity="CRITICAL"]').first() : vulns.filter('[severity="HIGH"]').first().length ? vulns.filter('[severity="HIGH"]').first() : vulns.first();
+  let seq = best.path; if (vuln.length) seq = seq.union(best.path.nodes().last().edgesWith(vuln)).union(vuln);
+  const items = seq.toArray(); const nodes = items.filter(x => x.isNode()); const total = nodes.length;
+  cy.elements().addClass('dim').removeClass('hot');
+  cy.animate({ fit: { eles: seq, padding: 60 }, duration: 600 });
+  let t = 500, hop = 0, prevEdge = null;
+  items.forEach(el => {
+    const delay = el.isNode() ? 1250 : 420;
+    replayTimers.push(setTimeout(() => {
+      el.removeClass('dim').addClass('hot'); if (el.isNode()) el.removeClass('quiet');
+      if (el.isEdge()) { prevEdge = el; return; }
+      const d = el.data(); const medium = prevEdge && prevEdge.data('confidence') === 'medium';
+      let title, sub;
+      if (d.label === 'Entrypoint') { title = `Attacker sends ${d.name}`; sub = 'Public HTTP endpoint. This is where the request enters.'; }
+      else if (d.label === 'Function') { title = hop === 1 ? `Handled by ${d.name}()` : `…which calls ${d.name}()`; sub = (d.file ? d.file + ' · ' : '') + (medium ? 'call matched by method name only · medium confidence' : 'call resolved statically · high confidence'); }
+      else if (d.label === 'Package') { title = `Reaches ${d.name}${d.version ? ' ' + d.version : ''}`; sub = 'The vulnerable library. Attacker-controlled data arrives here.'; }
+      else if (d.label === 'Vulnerability') { title = `${d.name}${d.severity ? ' · ' + d.severity : ''}`; sub = (d.summary || 'Published advisory affecting the installed version.') + (d.fixed ? ` · fixed in ${d.fixed}` : ''); }
+      else { title = d.name; sub = d.label; }
+      narrate(hop, total, title, sub); hop++;
+    }, t));
+    t += delay;
+  });
+  replayTimers.push(setTimeout(() => { const c = document.getElementById('caption'); c.querySelector('.hopn span:last-child').textContent = `${total} hops · path confirmed`; }, t));
+  replayTimers.push(setTimeout(() => { cy.elements().removeClass('dim hot'); cy.nodes('[label="Function"], [label="Vulnerability"]').toggleClass('quiet', cy.nodes().length > 70); document.getElementById('caption').classList.remove('show'); cy.animate({ fit: { eles: cy.elements(), padding: 24 }, duration: 600 }); }, t + 4500));
+}
+function replaySurface() {
+  const areas = cy.nodes('[label="Package"]').filter(n => String(n.id()).startsWith('area:')).sort((a, b) => (parseInt((b.data('name').match(/\((\d+)\)/) || [0, 0])[1]) - parseInt((a.data('name').match(/\((\d+)\)/) || [0, 0])[1]))).slice(0, 5);
+  const flagged = cy.nodes('[attn="public"]').union(cy.nodes('[attn="unknown"]')).sort((a, b) => (a.data('attn') === 'public' ? -1 : 1) - (b.data('attn') === 'public' ? -1 : 1));
+  const steps = [...areas.map(n => ({ n, kind: 'area' })), ...flagged.map(n => ({ n, kind: n.data('attn') }))];
+  if (!steps.length) return;
+  cy.elements().addClass('dim').removeClass('hot');
+  let t = 400;
+  steps.forEach((st, i) => {
+    replayTimers.push(setTimeout(() => {
+      cy.elements().removeClass('hot');
+      const hood = st.kind === 'area' ? st.n.closedNeighborhood() : st.n.closedNeighborhood();
+      hood.removeClass('dim').addClass('hot'); st.n.removeClass('quiet');
+      cy.animate({ fit: { eles: hood, padding: st.kind === 'area' ? 90 : 160 }, duration: 550 });
+      const d = st.n.data();
+      if (st.kind === 'area') narrate(i, steps.length, `API area ${d.name}`, `${st.n.degree(false)} confirmed calls shown · the frontend talks to this part of the backend`, 'api surface · step', 'done', 'mapping…');
+      else if (st.kind === 'public') narrate(i, steps.length, `🔴 ${d.name}`, 'Callable without login. Needs a human check: is this meant to be public?', 'api surface · step', 'done', 'flagging…');
+      else narrate(i, steps.length, `⚠ ${d.name}`, 'No auth status recorded and the path looks like it serves a file, certificate or export. Check it first.', 'api surface · step', 'done', 'flagging…');
+    }, t));
+    t += st.kind === 'area' ? 1700 : 2300;
+  });
+  replayTimers.push(setTimeout(() => { cy.elements().removeClass('dim hot'); document.getElementById('caption').classList.remove('show'); cy.animate({ fit: { eles: cy.elements(), padding: 24 }, duration: 700 }); }, t + 1200));
+}
+
+async function showEndpoint(id) {
+  const card = document.getElementById('epcard'), body = document.getElementById('epbody');
+  card.style.display = 'block'; body.innerHTML = '<span style="color:var(--muted)">loading…</span>';
+  const r = await fetch('/api/endpoint?id=' + encodeURIComponent(id)); const d = await r.json();
+  if (!r.ok) { body.innerHTML = `<span class="err">${esc(d.error)}</span>`; return; }
+  const auth = d.auth_required === false ? '<span class="pill bad">🔴 callable without login</span>' : d.auth_required === true ? '<span class="pill good">login required</span>' : '<span class="pill warn">⚠ auth status unknown</span>';
+  const src = { 'bundle-llm': 'confirmed HTTP call in the frontend code', bundle: 'route-like string in the frontend bundle (unconfirmed)', openapi: 'OpenAPI document', 'openapi-only': 'OpenAPI document only (not in the analysed code)', 'code+openapi': 'source code, confirmed by the OpenAPI document', code: 'source code', graphql: 'GraphQL schema' }[d.source] || d.source;
+  const list = (arr) => arr && arr.length ? `<ul>${arr.map(x => `<li><code>${esc(String(x))}</code></li>`).join('')}</ul>` : '<span style="color:var(--muted)">none recorded</span>';
+  const payload = d.body_fields && d.body_fields.length ? list(d.body_fields) : (['POST', 'PUT', 'PATCH'].includes(d.method) ? '<span style="color:var(--muted)">body expected, fields not visible in the available evidence</span>' : '<span style="color:var(--muted)">no request body (' + esc(d.method) + ')</span>');
+  body.innerHTML = `<h3><span class="m">${esc(d.method)}</span>${esc(d.path)}</h3>
+    ${d.full_url ? `<div class="url" title="click to copy" onclick="navigator.clipboard && navigator.clipboard.writeText(this.textContent)">${esc(d.full_url)}</div>${d.base_url_note ? `<div style="color:var(--muted);font-size:11px">${esc(d.base_url_note)}</div>` : ''}` : ''}
+    <div class="row">${auth}${d.live ? '<span class="pill">live</span>' : ''}${d.confirmed === false ? '<span class="pill warn">unconfirmed</span>' : ''}${(d.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>
+    <div class="sec"><b>Where it was found</b>${esc(src)}${d.summary ? `<div style="margin-top:3px"><code>${esc(d.summary)}</code></div>` : ''}${d.operation_id ? `<div style="color:var(--muted)">operationId ${esc(d.operation_id)}</div>` : ''}</div>
+    <div class="sec"><b>Path parameters</b>${list(d.path_params)}</div>
+    <div class="sec"><b>Query / header parameters</b>${list(d.params.filter(p => !String(p).startsWith('path:')))}</div>
+    <div class="sec"><b>Payload (request body)${d.content_type ? ' · ' + esc(d.content_type) : ''}</b>${payload}</div>
+    ${d.handlers && d.handlers.length ? `<div class="sec"><b>Handler in code</b>${d.handlers.map(h => `<div><code>${esc(h.qualname)}</code>${h.file ? `<div style="color:var(--muted)">${esc(h.file)}${h.line ? ':' + h.line : ''}</div>` : ''}</div>`).join('')}</div>` : '<div class="sec"><b>Handler in code</b><span style="color:var(--muted)">no source code in this graph</span></div>'}
+    ${d.owners && d.owners.length ? `<div class="sec"><b>Owners</b>${d.owners.map(o => `${esc(o.name)} (${o.commits} commits)`).join(' · ')}</div>` : ''}
+    ${d.vulnerabilities_on_paths && d.vulnerabilities_on_paths.length ? `<div class="sec"><b>Advisories on its code paths</b><ul>${d.vulnerabilities_on_paths.map(v => `<li>🔴 <code>${esc(v.package)}</code> ${esc(v.id)} · ${esc(v.severity)}</li>`).join('')}</ul></div>` : ''}
+    <button class="ghost ask">Ask the agent about this endpoint</button>`;
+  body.querySelector('button.ask').onclick = () => { card.style.display = 'none'; run(`Tell me everything about the endpoint ${d.method} ${d.path}: what it does, whether it is live and who can call it, what it accepts, which code handles it, who owns it, and whether any advisory reaches it. Do not probe it.`); };
+}
+let lastRunId = null;
+const AUTO_STORY = new URLSearchParams(location.search).get('story') !== '0';
+function openStory(id) { const f = document.getElementById('storyFrame'); f.src = `/replay/${id}?autoplay=1`; document.getElementById('story').classList.add('show'); setTimeout(() => f.contentWindow && f.contentWindow.focus(), 600); }
+function closeStory() { document.getElementById('story').classList.remove('show'); document.getElementById('storyFrame').src = 'about:blank'; }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeStory(); });
+window.addEventListener('message', e => { if (e.data === 'close-story') closeStory(); });
+document.getElementById('replay').onclick = () => lastRunId ? openStory(lastRunId) : replayPath();
+const chat = document.getElementById('chat'), trace = document.getElementById('trace'), promptEl = document.getElementById('prompt'), send = document.getElementById('send');
+function el(html, cls) { const d = document.createElement('div'); d.className = cls; d.innerHTML = html; return d; }
+function esc(s) { return String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+let stepCount = 0, toolNum = 0, started = 0, timer;
+function setPhase(p) { document.querySelectorAll('.phase').forEach(x => { x.classList.remove('active'); if (x.dataset.p === p) x.classList.add('active'); }); }
+function donePhases(seen) { document.querySelectorAll('.phase').forEach(x => x.classList.toggle('done', seen.has(x.dataset.p) && !x.classList.contains('active'))); }
+function addTool(e) {
+  toolNum++;
+  const t = el(`<div class="head"><div class="num">${toolNum}</div><div style="min-width:0"><div class="ttl">${esc(e.title || e.name)}</div><div class="sum">running…</div></div><div class="ms"></div></div><div class="body"><div></div></div>`, 'tool running');
+  t.dataset.name = e.name; t.querySelector('.head').onclick = () => t.classList.toggle('open');
+  trace.appendChild(t); trace.scrollTop = trace.scrollHeight; return t;
+}
+function fillTool(t, e) {
+  t.classList.remove('running'); t.classList.add(e.error ? 'error' : 'done');
+  if (!e.error) t.querySelector('.num').textContent = '✓';
+  const sum = t.querySelector('.sum'); sum.style.opacity = 0; setTimeout(() => { sum.textContent = e.summary || (e.error ? 'failed' : 'done'); sum.style.opacity = 1; }, 150);
+  t.querySelector('.ms').textContent = `${e.ms} ms`;
+  const body = t.querySelector('.body > div');
+  (e.steps || []).forEach(s => { stepCount++; body.appendChild(el(`<span class="k">${esc(s.type)}</span>${esc(s.label)}<span class="meta">${s.rows} rows · ${s.ms} ms</span>${s.query ? `<pre>${esc(s.query)}</pre>` : ''}`, `step ${s.type}`)); });
+  if (e.input !== undefined) { const c = document.createElement('div'); c.className = 'call'; c.innerHTML = `<div class="ln req"><b>→ ${esc(e.via === 'mcp' ? 'mcp.call_tool' : 'call')}</b>("${esc(e.name)}", ${esc(JSON.stringify(e.input))})</div><div class="ln res"><b>← result</b> ${e.result_chars ? `(${e.result_chars.toLocaleString()} chars${e.result_chars > 1500 ? ', truncated' : ''}) ` : ''}${esc(e.preview || '')}</div>`; body.appendChild(c); }
+  if (e.diff) { const d = document.createElement('div'); d.className = 'diff'; d.innerHTML = e.diff.split('\n').filter(l => !l.startsWith('diff --git') && !l.startsWith('index ')).map(l => `<span class="${l.startsWith('+') ? 'add' : l.startsWith('-') ? 'del' : l.startsWith('@@') ? 'hunk' : ''}">${esc(l)}</span>`).join(''); body.appendChild(d); }
+  document.getElementById('stepcount').textContent = `${stepCount} graph queries`;
+  if (e.via === 'mcp') document.getElementById('mcpbadge').style.display = '';
+  addGraph(e.graph);
+}
+function renderAnswer(live, text) {
+  const m = text.match(/\*\*Verdict:\*\*\s*(EXPLOITABLE|NOT REACHABLE|NEEDS REVIEW)/i);
+  const badge = m ? `<span class="verdict ${m[1].toUpperCase().replace(' ', '_')}">${m[1].toUpperCase()}</span>` : '';
+  live.innerHTML = badge + marked.parse(text || '_(no answer)_');
+  live.querySelectorAll('table').forEach(tb => { const w = document.createElement('div'); w.className = 'tblwrap'; tb.replaceWith(w); w.appendChild(tb); });
+  live.querySelectorAll('li, p').forEach(el => { if (/^\s*(🔴|⚠️|⚠)/.test(el.textContent)) el.classList.add('attn'); });
+  live.querySelectorAll('tr').forEach(tr => { if (/(🔴|⚠️|⚠)/.test(tr.textContent)) tr.classList.add('attn'); });
+  live.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function run(prompt) {
+  if (!prompt.trim() || send.disabled) return;
+  if (chat.querySelector('.empty')) chat.innerHTML = '';
+  document.getElementById('overview')?.remove();
+  cy.elements().remove(); stepCount = 0; toolNum = 0; document.getElementById('stepcount').textContent = ''; document.getElementById('gcount').textContent = '';
+  document.querySelectorAll('.phase').forEach(x => x.classList.remove('active', 'done'));
+  chat.appendChild(el(esc(prompt), 'msg user'));
+  send.disabled = true; promptEl.value = '';
+  const live = el('<div class="status"><span class="dot"></span><span class="txt">Reading the graph…</span></div>', 'msg agent'); chat.appendChild(live); chat.scrollTop = chat.scrollHeight;
+  const status = live.querySelector('.txt');
+  const setStatus = s => { if (!status) return; status.style.opacity = 0; setTimeout(() => { status.textContent = s; status.style.opacity = 1; }, 200); };
+  started = Date.now(); clearInterval(timer); timer = setInterval(() => document.getElementById('elapsed').textContent = `${Math.round((Date.now() - started) / 1000)} s`, 500);
+  const pending = [], seen = new Set();
+  const res = await fetch('/api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt, session: 'ui', reset: true }) });
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2);
+      if (!line.startsWith('data:')) continue;
+      const e = JSON.parse(line.slice(5));
+      if (e.type === 'tool_call') { pending.push(addTool(e)); seen.add(e.phase); setPhase(e.phase); donePhases(seen); setStatus(e.title + '…'); }
+      else if (e.type === 'tool_result') { const t = pending.find(x => x.dataset.name === e.name && !x.dataset.done); if (t) { t.dataset.done = 1; fillTool(t, e); } }
+      else if (e.type === 'thinking') { setStatus(e.text.split(/(?<=\.)\s/)[0].slice(0, 140)); }
+      else if (e.type === 'text' && e.text) { setStatus(e.text.slice(0, 140)); }
+      else if (e.type === 'final') { renderAnswer(live, e.text); document.getElementById('usage').textContent = `${e.usage.input.toLocaleString()} tokens in · ${e.usage.output.toLocaleString()} out`; document.querySelectorAll('.phase.active').forEach(x => { x.classList.remove('active'); x.classList.add('done'); }); setTimeout(() => cy.animate({ fit: { eles: cy.elements(), padding: 24 }, duration: 600 }), 900); setTimeout(replayPath, 1600); loadFunnel(); }
+      else if (e.type === 'done' && e.report_url) { lastRunId = e.run_id; if (AUTO_STORY) setTimeout(() => openStory(e.run_id), 2200); document.getElementById('replay').innerHTML = '▶ replay story'; const r = document.createElement('a'); r.className = 'reportbtn'; r.href = '#'; r.onclick = ev => { ev.preventDefault(); openStory(e.run_id); }; r.innerHTML = '&#9654; Replay story'; live.prepend(r); const a = document.createElement('a'); a.className = 'reportbtn'; a.href = e.report_url; a.target = '_blank'; a.innerHTML = '&#128196; Open full report'; const v = live.querySelector('.verdict'); v ? v.after(a) : live.prepend(a); document.getElementById('usage').innerHTML += ` · <a href="${e.report_url}" target="_blank" style="color:var(--accent)">report</a>`; }
+      else if (e.type === 'error') { live.innerHTML = `<span style="color:var(--bad)">${esc(e.message)}</span>`; }
+      if (e.type !== 'final') chat.scrollTop = chat.scrollHeight;
+    }
+  }
+  clearInterval(timer); send.disabled = false;
+}
+document.getElementById('form').onsubmit = e => { e.preventDefault(); run(promptEl.value); };
+promptEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(promptEl.value); } });
+const auto = new URLSearchParams(location.search).get('run');
+async function refreshAll() {
+  const h = await (await fetch('/api/health')).json();
+  const tgt = document.getElementById('target'); if (tgt) tgt.textContent = '· ' + (h.live && h.live.kind === 'live-only' ? h.live.url.replace(/^https?:\/\//, '') : h.graph);
+  const empty = document.querySelector('#chat .empty'); if (empty) empty.innerHTML = h.live && h.live.kind === 'live-only'
+    ? `Working on <b>${esc(h.live.url.replace(/^https?:\/\//, ''))}</b> (live frontend only, no source code). Pick a scenario or ask about its API surface, public calls or payloads.`
+    : `Working on <b>${esc(h.graph)}</b>. Pick a scenario or ask about a CVE, an advisory id, or a package.<br>The agent walks the code graph and shows every hop it took.`;
+  const want = ['Function', 'Entrypoint', 'Package', 'Vulnerability', 'Decision'];
+  const c = Object.fromEntries(h.counts.map(x => [x.label, x.n]));
+  if (h.tools_via === 'mcp') document.getElementById('mcpbadge').style.display = '';
+  document.getElementById('stats').innerHTML = want.filter(k => c[k] !== undefined).map((k, i) => `<span class="pill" style="animation-delay:${i * 70}ms"><b>${c[k].toLocaleString()}</b> ${({Function:'functions',Entrypoint:'endpoints',Package:'packages',Vulnerability:'vulnerabilities',Decision:'decisions'})[k]}</span>`).join('') + (h.anthropic_key ? '' : '<span class="pill warnpill">API key missing</span>');
+  cy.elements().remove(); addGraph(await (await fetch('/api/graph/seed')).json());
+  const o = await (await fetch('/api/overview')).json();
+  const max = Math.max(...o.packages.map(p => p.used), 1);
+  let ov = document.getElementById('overview'); if (!ov) { ov = document.createElement('div'); ov.className = 'ov'; ov.id = 'overview'; trace.innerHTML = ''; trace.appendChild(ov); }
+  ov.innerHTML = `<div style="color:var(--muted);padding:6px 0 10px;font-size:12px">Vulnerable packages, ranked by how much first-party code touches them. Run a scenario to see the agent's reasoning here.</div><table>` +
+    o.packages.filter(p => p.used > 0).map(p => `<tr><td><span class="pkgname">${esc(p.package)}</span> <span class="ver">${esc(p.version)}</span><div class="bar"><i data-w="${Math.round(100 * p.used / max)}"></i></div></td><td class="n">${p.used} functions</td><td class="n ${p.high ? 'hi' : ''}">${p.high} high</td><td class="n">${p.vulns} advisories</td></tr>`).join('') + '</table>';
+  requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('.ov .bar i').forEach(b => b.style.width = b.dataset.w + '%'), 50));
+  const feed = document.createElement('div'); feed.className = 'feed'; ov.prepend(feed); loadFeed(feed);
+  if (h.live) { const lc = document.createElement('div'); lc.className = 'livecard'; lc.innerHTML = `<div class="h"><span><i></i>${h.live.kind === 'live-only' ? 'Live app surface' : 'Live app connected'} · ${esc(h.live.url.replace(/^https?:\/\//, ''))}${h.live.framework && h.live.framework !== 'unknown' ? ' · ' + esc(h.live.framework) + ' frontend' : ''}</span><span style="color:var(--muted);font-weight:400">${esc(h.live.version || '')}</span></div><div class="row">${h.live.kind === 'live-only' ? `<span><b>${h.live.confirmed}</b> confirmed API calls</span><span><b>${h.live.route_strings}</b> route strings seen in the bundle</span>` : `<span><b>${h.live.live}</b> deployed endpoints</span>`}<span class="${h.live.live_unauth ? 'bad' : ''}"><b>${h.live.live_unauth}</b> callable without login</span>${h.live.auth_unknown ? `<span class="warn"><b>${h.live.auth_unknown}</b> auth status unknown</span>` : ''}<span class="${h.live.only_live ? 'warn' : ''}"><b>${h.live.only_live}</b> only in deployment</span><span class="${h.live.only_code ? 'warn' : ''}"><b>${h.live.only_code}</b> only in code</span></div>`; ov.prepend(lc); }
+  loadFunnel();
+  buildScenarios(h.graph, o.packages, h.live);
+  const gl = await (await fetch('/api/graphs')).json();
+  document.getElementById('graphsel').innerHTML = gl.graphs.map(g => `<option value="${esc(g.name)}" ${g.current ? 'selected' : ''}>${esc(g.name)} · ${g.eps} endpoints · ${g.kind === 'live-only' ? 'live surface' + (g.framework && g.framework !== 'unknown' ? ' (' + esc(g.framework) + ')' : '') : g.vulns + ' advisories'}</option>`).join('');
+}
+document.getElementById('graphsel').onchange = async e => { await fetch('/api/graph/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: e.target.value }) }); chat.innerHTML = '<div class="empty">Switched repo. Pick a scenario or ask a question.</div>'; refreshAll(); };
+document.getElementById('connect').onsubmit = async e => {
+  e.preventDefault(); const url = document.getElementById('liveurl').value.trim(); if (!url) return;
+  const box = document.getElementById('ingest'), log = document.getElementById('ingestLog'), bar = document.getElementById('ingestBar'), foot = document.getElementById('ingestFoot');
+  box.classList.add('show'); document.querySelector('#ingest .k').textContent = 'connecting live app'; document.getElementById('ingestTitle').textContent = url.replace(/^https?:\/\//, '');
+  log.innerHTML = '<li class="stage">looking for an OpenAPI document (incl. Swagger/Redoc pages), GraphQL schema and frontend API calls …</li><li class="stage">reading the JavaScript bundles with the LLM to extract endpoints built from constants and templates (takes a minute) …</li>'; bar.style.width = '15%'; foot.innerHTML = '';
+  const res = await fetch('/api/discover', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }); const d = await res.json();
+  if (res.status === 409 && d.suggest_analyze) {
+    log.innerHTML += `<li class="detail">${esc(d.error)}</li>`; bar.style.width = '40%';
+    const host = url.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    await streamIngest(await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }), host);
+    return;
+  }
+  if (!res.ok) { foot.innerHTML = `<span class="err">${esc(d.error)}</span><button class="ghost" onclick="document.getElementById('ingest').classList.remove('show')">close</button>`; return; }
+  bar.style.width = '100%';
+  const fw = d.framework && d.framework !== 'unknown' ? d.framework + ' ' : '';
+  const surface = !d.live_endpoints && d.frontend_api_paths;
+  log.innerHTML += surface
+    ? `<li class="detail">No OpenAPI document is published (normal for a compiled ${fw}app), so the API was read from the frontend code itself · ${d.seconds} s</li><li class="detail"><b>${d.frontend_confirmed_calls || 0} API calls confirmed</b> from HTTP calls in the ${fw}bundles · ${(d.frontend_api_paths || 0) - (d.frontend_confirmed_calls || 0)} other route-like strings kept as unconfirmed</li>${d.matched_to_code || d.only_in_code ? `<li class="detail">${d.frontend_paths_matched} matched to code · ${d.only_in_code} only in code</li>` : `<li class="detail">No source code in this graph: advisories, reachability and fixes need the backend repository (Analyze box)</li>`}`
+    : `<li class="detail">${d.openapi_title || 'API'} ${d.openapi_version || ''} · ${d.live_endpoints} documented endpoints in ${d.seconds} s</li><li class="detail">${d.matched_to_code} matched to code · ${d.only_live} only in the live app · ${d.only_in_code} only in code (drift)</li><li class="detail">${d.frontend_api_paths} paths found in the ${fw}frontend bundles · ${d.frontend_confirmed_calls || 0} confirmed HTTP calls · ${d.frontend_paths_matched} matched to code</li>${d.llm && d.llm.endpoints_found ? `<li class="detail">LLM read the bundles: ${d.llm.endpoints_found} endpoints extracted, ${d.llm.new_vs_regex_and_spec} not in the spec or regex pass</li>` : ''}`;
+
+  setTimeout(async () => { box.classList.remove('show'); document.querySelector('#ingest .k').textContent = 'building graph'; await refreshAll(); }, 2600);
+};
+async function streamIngest(res, label) {
+  const box = document.getElementById('ingest'), log = document.getElementById('ingestLog'), bar = document.getElementById('ingestBar'), foot = document.getElementById('ingestFoot');
+  box.classList.add('show'); document.querySelector('#ingest .k').textContent = 'building graph'; log.innerHTML = ''; bar.style.width = '3%'; foot.innerHTML = ''; document.getElementById('ingestTitle').textContent = label;
+  const t0 = Date.now(); const tick = setInterval(() => foot.innerHTML = `<span>${Math.round((Date.now() - t0) / 1000)} s</span>`, 500);
+  const pct = { clone: 10, parse: 30, deps: 55, git: 75, load: 90, live: 95 };
+  if (!res.ok) { clearInterval(tick); foot.innerHTML = `<span class="err">${esc((await res.json()).error)}</span><button class="ghost" onclick="document.getElementById('ingest').classList.remove('show')">close</button>`; return; }
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break; buf += dec.decode(value, { stream: true });
+    let i; while ((i = buf.indexOf('\n\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 2); if (!line.startsWith('data:')) continue; const ev = JSON.parse(line.slice(5));
+      if (ev.type === 'progress') { const li = document.createElement('li'); li.className = ev.stage === 'detail' ? 'detail' : 'stage'; li.textContent = ev.msg; log.appendChild(li); log.scrollTop = log.scrollHeight; if (pct[ev.stage]) bar.style.width = pct[ev.stage] + '%'; }
+      else if (ev.type === 'done') { clearInterval(tick); bar.style.width = '100%'; const c = ev.counts; foot.innerHTML = `<span>${ev.seconds} s · ${(c.Function||0).toLocaleString()} functions · ${c.Entrypoint||0} endpoints · ${c.Package||0} packages · ${c.Vulnerability||0} advisories${ev.warnings.length ? '<br><span class="err">' + ev.warnings.map(esc).join('<br>') + '</span>' : ''}</span>`; setTimeout(async () => { box.classList.remove('show'); chat.innerHTML = `<div class="empty">Now analysing <b>${esc(ev.graph)}</b>. Ask about any package, advisory or endpoint in it.</div>`; await refreshAll(); }, ev.warnings.length ? 4500 : 1800); }
+      else if (ev.type === 'error') { clearInterval(tick); foot.innerHTML = `<span class="err">${esc(ev.message)}</span><button class="ghost" onclick="document.getElementById('ingest').classList.remove('show')">close</button>`; }
+    }
+  }
+}
+document.getElementById('uploadbtn').onclick = () => document.getElementById('zipfile').click();
+document.getElementById('zipfile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('file', f); fd.append('live_url', document.getElementById('liveurl').value.trim());
+  await streamIngest(await fetch('/api/upload', { method: 'POST', body: fd }), f.name); e.target.value = '';
+};
+document.getElementById('analyze').onsubmit = async e => {
+  e.preventDefault(); const url = document.getElementById('repourl').value.trim(); if (!url) return;
+  const live = document.getElementById('liveurl').value.trim();
+  await streamIngest(await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, live_url: live }) }), url.replace(/^https?:\/\/(www\.)?github\.com\//, ''));
+};
+(async () => {
+  await refreshAll();
+  if (auto !== null && SCENARIOS[+auto]) setTimeout(() => run(SCENARIOS[+auto][1]), 400);
+})();
+(async () => { return; const h = await (await fetch('/api/health')).json();
+  const want = ['Function', 'Entrypoint', 'Package', 'Vulnerability', 'Decision'];
+  const c = Object.fromEntries(h.counts.map(x => [x.label, x.n]));
+  if (h.tools_via === 'mcp') document.getElementById('mcpbadge').style.display = '';
+  document.getElementById('stats').innerHTML = want.filter(k => c[k] !== undefined).map((k, i) => `<span class="pill" style="animation-delay:${i * 70}ms"><b>${c[k].toLocaleString()}</b> ${({Function:'functions',Entrypoint:'endpoints',Package:'packages',Vulnerability:'vulnerabilities',Decision:'decisions'})[k]}</span>`).join('') +
+    (h.anthropic_key ? '' : '<span class="pill warnpill">API key missing</span>');
+  addGraph(await (await fetch('/api/graph/seed')).json());
+  const o = await (await fetch('/api/overview')).json();
+  const max = Math.max(...o.packages.map(p => p.used), 1);
+  document.getElementById('overview').innerHTML = `<div style="color:var(--muted);padding:6px 0 10px;font-size:12px">Vulnerable packages, ranked by how much first-party code touches them. Run a scenario to see the agent's reasoning here.</div><table>` +
+    o.packages.filter(p => p.used > 0).map(p => `<tr><td><span class="pkgname">${esc(p.package)}</span> <span class="ver">${esc(p.version)}</span><div class="bar"><i data-w="${Math.round(100 * p.used / max)}"></i></div></td><td class="n">${p.used} functions</td><td class="n ${p.high ? 'hi' : ''}">${p.high} high</td><td class="n">${p.vulns} advisories</td></tr>`).join('') + '</table>';
+  requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('.ov .bar i').forEach(b => b.style.width = b.dataset.w + '%'), 50));
+  const feed = document.createElement('div'); feed.className = 'feed'; document.getElementById('overview').prepend(feed); loadFeed(feed);
+  loadFunnel();
+  if (auto !== null && SCENARIOS[+auto]) setTimeout(() => run(SCENARIOS[+auto][1]), 400);
+})();
+</script>
+</body>
+</html>
