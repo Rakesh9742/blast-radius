@@ -23,5 +23,6 @@ WALL_S=$(python3 -c "import json; print(json.load(open('timeline.json'))['totalM
 F=$(python3 -c "print(round($WALL_S/$RAW_S, 6))"); echo "video time factor: $F (raw ${RAW_S}s -> wall ${WALL_S}s)"
 FILTER="[0:v]setpts=PTS*$F[vout];$FILTER"
 eval ffmpeg -v error -y $INPUTS -filter_complex "'$FILTER'" -map "'[vout]'" -map "'[aout]'" -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -r 25 -c:a aac -b:a 160k -movflags +faststart "$DEST"
+if [ "${SILENT:-1}" = "1" ]; then ffmpeg -v error -y -i "$DEST" -c:v copy -an -movflags +faststart "${DEST%.mp4}-silent.mp4" && mv "${DEST%.mp4}-silent.mp4" "$DEST"; echo "voice track removed (captions only); set SILENT=0 to keep narration"; fi
 ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of default=nw=1 "$DEST"
 ls -la "$DEST" | awk '{print $5/1048576 " MB"}'

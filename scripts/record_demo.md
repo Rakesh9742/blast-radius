@@ -11,4 +11,4 @@ OUT=/tmp/demo node record.js                                  # ~4 minutes, runs
 OUT=/tmp/demo DEST=$HOME/Desktop/blast-radius-demo.mp4 ./assemble.sh
 ```
 
-`OUT/timeline.json` records when each narration clip started; `assemble.sh` delays each clip to that time and mixes them. Change `VOICE` or `RATE` in the environment to use another voice or speed.
+`OUT/timeline.json` records when each narration clip started; `assemble.sh` delays each clip to that time and mixes them. The final file is captions-only by default (the speech is used only to pace the scenes); set `SILENT=0` to keep the voice track. Change `VOICE` or `RATE` to use another voice or speed.
