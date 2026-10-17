@@ -12,7 +12,7 @@ Vulnerability -AFFECTS-> Package <-USES- Function <-CALLS*- Function(handler) -E
 
 ## Demo video
 
-Three minutes, captioned: [download / play the demo video](https://github.com/Rakesh9742/blast-radius/releases/download/v1.0-demo/blast-radius-demo.mp4) (hosted as a [GitHub release asset](https://github.com/Rakesh9742/blast-radius/releases/tag/v1.0-demo)). Scenes and narration are in [docs/demo-scenes.md](docs/demo-scenes.md).
+Three minutes, captioned: [watch on Google Drive](https://drive.google.com/file/d/1X8aam-g2Rn-TDCO35Rv8r76NCgHlLjZU/view?usp=sharing) or [download / play the demo video](https://github.com/Rakesh9742/blast-radius/releases/download/v1.0-demo/blast-radius-demo.mp4) (hosted as a [GitHub release asset](https://github.com/Rakesh9742/blast-radius/releases/tag/v1.0-demo)). Scenes and narration are in [docs/demo-scenes.md](docs/demo-scenes.md).
 
 ## Graph data model and queries
 
