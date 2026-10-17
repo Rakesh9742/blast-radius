@@ -1,4 +1,4 @@
-.PHONY: setup db ingest serve demo cli stop
+.PHONY: setup db ingest serve demo cli stop forget-decisions restart
 
 PY=.venv/bin/python
 REPO?=data/repos/mealie
@@ -37,3 +37,11 @@ test:             ## parser unit test
 
 scenarios:        ## run the agent on the demo scenarios and check expectations (needs ANTHROPIC_API_KEY)
 	$(PY) -m tests.scenarios
+
+forget-decisions: ## delete the agent's recorded triage decisions in the current demo graph
+	$(PY) -c "import sys; sys.path.insert(0,'.'); from core.db import get_graph; get_graph('$(GRAPH)').query('MATCH (d:Decision) DETACH DELETE d'); print('decisions cleared')"
+
+restart:          ## restart the web console on :8000
+	-lsof -ti :8000 -sTCP:LISTEN | xargs kill 2>/dev/null; sleep 1
+	nohup .venv/bin/uvicorn server.app:app --port 8000 > /tmp/blast-radius.log 2>&1 &
+	@sleep 3 && curl -s http://localhost:8000/api/health | cut -c1-60 && echo

@@ -1,5 +1,18 @@
 # Demo video script (target 3:00)
 
+## Before you press record (5 minutes)
+
+```bash
+cd /Users/rakesh/blast-radius
+make reset-repo                       # mealie back to v3.0.0, agent branches gone
+make forget-decisions                 # drop earlier triage decisions so the run is fresh
+gh pr list --repo Rakesh9742/mealie   # must be empty; otherwise: gh pr close <n> --repo Rakesh9742/mealie --delete-branch
+make restart                          # restart the console on :8000
+```
+
+Then open http://localhost:8000 and pick **mealie** in the dropdown. Hide the bookmarks bar, window 1600x900, zoom 100%. Open https://github.com/Rakesh9742/mealie/pulls in a second tab. Start recording with Cmd+Shift+5 (record selected window) and speak the lines below.
+
+
 Record at 1600x900, UI at http://localhost:8000, FalkorDB Browser in a second tab. Fresh graph (`make ingest`, which also clears old decisions), repo reset (`make reset-repo`), server running (`make serve`). Hide the browser bookmarks bar.
 
 ## 0:00-0:30 Problem
