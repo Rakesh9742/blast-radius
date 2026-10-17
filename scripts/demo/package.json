@@ -1,0 +1,6 @@
+{
+  "name": "blast-radius-demo-video",
+  "private": true,
+  "description": "Records the narrated Blast Radius demo video from the local console",
+  "dependencies": { "puppeteer-core": "^23.11.1" }
+}
