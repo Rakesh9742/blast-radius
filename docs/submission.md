@@ -8,7 +8,7 @@
 
 **Repository:** https://github.com/Rakesh9742/blast-radius
 
-**Demo video:** <paste YouTube/Drive link>
+**Demo video:** https://github.com/Rakesh9742/blast-radius/releases/download/v1.0-demo/blast-radius-demo.mp4 (GitHub release asset; release page: https://github.com/Rakesh9742/blast-radius/releases/tag/v1.0-demo)
 
 **Live deployment:** Local setup (one command, `make demo`), instructions in the README. FalkorDB runs in Docker; the console runs on http://localhost:8000.
 

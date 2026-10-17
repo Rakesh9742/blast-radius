@@ -10,6 +10,10 @@ Vulnerability -AFFECTS-> Package <-USES- Function <-CALLS*- Function(handler) -E
                                    Author -OWNS-+   Author -AUTHORED-> Commit -MODIFIED-> File
 ```
 
+## Demo video
+
+Three minutes, captioned: [download / play the demo video](https://github.com/Rakesh9742/blast-radius/releases/download/v1.0-demo/blast-radius-demo.mp4) (hosted as a [GitHub release asset](https://github.com/Rakesh9742/blast-radius/releases/tag/v1.0-demo)). Scenes and narration are in [docs/demo-scenes.md](docs/demo-scenes.md).
+
 ## Graph data model and queries
 
 The full node/edge model with properties, and every Cypher query and FalkorDB algorithm the product depends on, are in [docs/queries.md](docs/queries.md).
