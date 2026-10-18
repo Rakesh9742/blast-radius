@@ -388,17 +388,23 @@ class GraphTools:
                 pass
         target = str(max(fixes)) if fixes else None
         unfixed = [d["id"] for d in data if not d["fixed"]]
-        latest = self._pypi_latest(package)
-        return {"package": package, "installed": data[0]["installed"], "minimum_safe_version": target, "latest_on_pypi": latest,
+        latest, registry = self._latest(package)
+        return {"package": package, "installed": data[0]["installed"], "minimum_safe_version": target, "latest_release": latest, "registry": registry,
                 "vulnerabilities_resolved": len(data) - len(unfixed), "vulnerabilities_without_fix": unfixed,
                 "constraint_suggestion": f'{package} = "^{target}"' if target else None}
 
-    def _pypi_latest(self, package: str) -> str | None:
+    def _latest(self, package: str) -> tuple[str | None, str]:
+        """Latest release from the registry that matches the repo's ecosystem (npm for JavaScript/TypeScript graphs, PyPI otherwise)."""
+        lang = self.q("MATCH (r:Repo) RETURN r.language AS l LIMIT 1", {}, "repo language")
+        npm = bool(lang) and (lang[0]["l"] or "").lower() in ("javascript", "typescript", "js", "ts")
         try:
+            if npm:
+                r = httpx.get(f"https://registry.npmjs.org/{package}/latest", timeout=15)
+                return (r.json().get("version") if r.status_code == 200 else None), "npm"
             r = httpx.get(f"https://pypi.org/pypi/{package}/json", timeout=15)
-            return r.json()["info"]["version"] if r.status_code == 200 else None
+            return (r.json()["info"]["version"] if r.status_code == 200 else None), "PyPI"
         except Exception:
-            return None
+            return None, "npm" if npm else "PyPI"
 
     def verify_fix(self, package: str, version: str) -> dict:
         """Ask OSV whether the proposed version still has known vulnerabilities."""

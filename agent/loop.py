@@ -104,7 +104,7 @@ def describe(name: str, args: dict, out: str) -> dict:
         elif name == "past_decisions":
             s = f"{len(o['decisions'])} earlier decisions" if o["decisions"] else "nothing triaged before"
         elif name == "plan_fix":
-            s = f"{o['installed']} → {o['minimum_safe_version']} (latest {o['latest_on_pypi']}), resolves {o['vulnerabilities_resolved']} advisories"
+            s = f"{o['installed']} → {o['minimum_safe_version']} (latest on {o.get('registry', 'the registry')} {o.get('latest_release')}), resolves {o['vulnerabilities_resolved']} advisories"
         elif name == "verify_fix":
             s = f"{o['package']} {o['version']}: " + ("clean, no known vulnerabilities" if o["clean"] else f"{len(o['known_vulnerabilities'])} known vulnerabilities remain")
         elif name == "apply_dependency_fix":
