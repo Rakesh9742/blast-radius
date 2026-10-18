@@ -406,11 +406,24 @@ class GraphTools:
             new = re.sub(rf'(?im)^({name_re})(\[[^\]]*\])?\s*==\s*[^\s;#\\]+', rf'\g<1>\g<2>=={version}', txt)
             if new != txt:
                 rq.write_text(new); changed.append(str(rq.relative_to(repo)))
+        # 1c) npm transitive dependency: pin it through package.json "overrides" and refresh the lockfile
+        root_pj, lock = repo / "package.json", repo / "package-lock.json"
+        if not changed and root_pj.exists() and lock.exists() and re.search(rf'"node_modules/(?:[^"]+/)?{re.escape(package)}"', lock.read_text(errors="ignore")):
+            import json as _json
+            data = _json.loads(root_pj.read_text())
+            data.setdefault("overrides", {})[package] = f"^{version}"
+            root_pj.write_text(_json.dumps(data, indent=2) + "\n")
+            r = subprocess.run(["npm", "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], cwd=str(repo), capture_output=True, text=True, timeout=300)
+            if r.returncode != 0:
+                git("checkout", "-q", "--", "package.json")
+                return {"error": "npm could not refresh package-lock.json for the override", "stderr": r.stderr[-400:]}
+            changed += ["package.json", "package-lock.json"]
         if not changed:
             already = any(re.search(rf'(?im)^{name_re}\b.*{re.escape(version)}', (f.read_text(errors="ignore"))) for f in list(repo.rglob("pyproject.toml")) + [q for q in repo.rglob("*.txt") if q.name.startswith("requirements") or q.parent.name == "requirements"] if not (set(f.parts) & skip))
             if already:
                 return {"status": "already at version", "package": package, "version": version, "note": "the working tree already pins this version (a previous fix branch may be checked out)"}
-            return {"error": f"{package} is not pinned directly in pyproject.toml or any requirements file; it is transitive.",
+            where = "package.json (and no npm lockfile to add an override to)" if root_pj.exists() else "pyproject.toml or any requirements file"
+            return {"error": f"{package} is not pinned directly in {where}; it is transitive.",
                     "suggestion": f"bump the parent package that depends on it, or add an explicit pin `{package}>={version}` to force the resolver"}
         git("checkout", "-q", "-B", branch)
         diff = git("diff").stdout
@@ -419,7 +432,7 @@ class GraphTools:
         git("add", *changed); git("-c", "user.name=Blast Radius", "-c", "user.email=blast-radius@example.com", "commit", "-q", "-m", msg)
         sha = git("rev-parse", "--short", "HEAD").stdout.strip()
         self.trace.steps.append({"type": "action", "label": f"git branch {branch} @ {sha} ({', '.join(changed)})", "rows": 1, "ms": 0})
-        note = ("package-lock.json must be regenerated in CI (`npm install`); this change updates the declared range." if any(f.endswith("package.json") for f in changed)
+        note = "" if "package-lock.json" in changed else (("package-lock.json must be regenerated in CI (`npm install`); this change updates the declared range." if any(f.endswith("package.json") for f in changed))
                 else "poetry.lock / uv.lock must be regenerated in CI (`poetry lock` / `uv lock`); this change updates the declared constraint." if any(f.endswith("pyproject.toml") for f in changed) else "pinned requirements updated directly.")
         return {"branch": branch, "commit": sha, "files_changed": changed, "diff": diff, "lockfile_note": note}
 
@@ -428,6 +441,13 @@ class GraphTools:
         token, repo_slug = os.getenv("GITHUB_TOKEN"), os.getenv("GITHUB_REPO")
         if not (token and repo_slug and self.repo_path):
             return self.write_triage_report(title, body)
+        try:   # when the analysed repo is the owner's own GitHub repo, open the PR there instead of the configured fork
+            own = self.q("MATCH (r:Repo) RETURN r.url AS url LIMIT 1", {}, "repo url")
+            m = re.match(r"https?://github\.com/([^/]+)/([^/#?]+)", (own[0]["url"] or "") if own else "")
+            if m and m.group(1).lower() == repo_slug.split("/")[0].lower():
+                repo_slug = f"{m.group(1)}/{m.group(2).removesuffix('.git')}"
+        except Exception:
+            pass
         git = lambda *a: subprocess.run(["git", "-C", self.repo_path, *a], capture_output=True, text=True)
         branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
         base = os.getenv("GITHUB_BASE_BRANCH", "blast-radius/base")
@@ -516,7 +536,7 @@ TOOL_DEFS = [
      "input_schema": _schema({"package": {"type": "string"}}, ["package"])},
     {"name": "verify_fix", "description": "Check with OSV whether a proposed package version still has known vulnerabilities. Use after plan_fix and before applying.",
      "input_schema": _schema({"package": {"type": "string"}, "version": {"type": "string"}}, ["package", "version"])},
-    {"name": "apply_dependency_fix", "description": "ACTION: create a git branch in the analysed repo, bump the package constraint in pyproject.toml and commit. Returns the diff.",
+    {"name": "apply_dependency_fix", "description": "ACTION: create a git branch in the analysed repo and bump the package: pyproject.toml / requirements for Python, package.json for npm (transitive npm packages are pinned via an 'overrides' entry and the lockfile is refreshed). Commits and returns the diff.",
      "input_schema": _schema({"package": {"type": "string"}, "version": {"type": "string"}, "vulnerability_ids": {"type": "array", "items": {"type": "string"}}}, ["package", "version", "vulnerability_ids"])},
     {"name": "open_pull_request", "description": "ACTION: push the fix branch and open a pull request on the configured GitHub fork. If GitHub is not configured it writes a triage report file instead. Body should be markdown with: impact, affected endpoints, attack path, owners, fix.",
      "input_schema": _schema({"title": {"type": "string"}, "body": {"type": "string"}}, ["title", "body"])},
