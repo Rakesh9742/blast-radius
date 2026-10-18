@@ -434,6 +434,17 @@ def seed():
     return {"nodes": nodes, "edges": edges}
 
 
+@app.get("/api/decisions")
+def decisions(limit: int = 12):
+    """The agent's memory on this graph: latest triage decisions with advisory, package and reason."""
+    g = get_graph(_graph())
+    data = rows(g.ro_query("MATCH (v:Vulnerability)-[:TRIAGED]->(d:Decision) MATCH (v)-[a:AFFECTS]->(p:Package) "
+                           "RETURN d.status AS status, d.reason AS reason, d.decided_at AS decided_at, v.id AS vuln, v.severity AS severity, p.name AS package, p.version AS version, a.fixed_version AS fixed "
+                           "ORDER BY d.decided_at DESC LIMIT $n", {"n": limit}))
+    summary = rows(g.ro_query("MATCH (d:Decision) RETURN d.status AS status, count(*) AS n ORDER BY n DESC"))
+    return {"decisions": data, "summary": summary, "total": sum(r["n"] for r in summary)}
+
+
 @app.get("/api/endpoint")
 def endpoint_detail(id: str):
     """Everything known about one endpoint: method, path, full URL, auth, where it was seen, evidence, parameters, body, handler, owners."""

@@ -23,14 +23,14 @@ table{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:14px}th,t
 .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:#1a2333;color:#cbd5e1;margin-right:6px}
 </style></head><body><div class="wrap">
 <nav><h1>&#9673; Blast <span>Radius</span></h1><div class="sub">The complete guide · read once, explain forever</div>
-<a href="#one">1. In one minute</a><a href="#problem">2. The problem</a><a href="#built">3. What we built</a><a href="#run">4. One run, step by step</a><a href="#graph">5. The graph</a><a href="#tools">6. The 20 tools</a><a href="#tech">7. Technologies and why</a><a href="#falkor">8. FalkorDB: what breaks without it</a><a href="#inputs">9. Inputs: repo, zip, folder, URL</a><a href="#live">10. Live-app discovery</a><a href="#ui">11. Explainability and the UI</a><a href="#numbers">12. Numbers to remember</a><a href="#limits">13. Honest limits</a><a href="#qa">14. Questions judges ask</a><a href="#you">15. What you did, what the AI did</a><a href="#files">16. Where everything lives</a><a href="#glossary">17. Glossary</a></nav>
+<a href="#one">1. In one minute</a><a href="#problem">2. The problem</a><a href="#built">3. What we built</a><a href="#run">4. One run, step by step</a><a href="#graph">5. The graph</a><a href="#tools">6. The 21 tools</a><a href="#tech">7. Technologies and why</a><a href="#falkor">8. FalkorDB: what breaks without it</a><a href="#inputs">9. Inputs: repo, zip, folder, URL</a><a href="#live">10. Live-app discovery</a><a href="#ui">11. Explainability and the UI</a><a href="#numbers">12. Numbers to remember</a><a href="#limits">13. Honest limits</a><a href="#qa">14. Questions judges ask</a><a href="#you">15. What you did, what the AI did</a><a href="#files">16. Where everything lives</a><a href="#glossary">17. Glossary</a></nav>
 <main>
 
 <h2 id="one"><small>Section 1</small>In one minute</h2>
 <div class="say">A dependency scanner tells you "Pillow has 36 advisories". It cannot tell you whether a single one of them is reachable from the internet in <em>your</em> code. Blast Radius loads your repository into FalkorDB as one graph and lets an AI agent walk it: advisory, to package, to the functions that use it, up the call chain, to the HTTP endpoint an attacker can hit. Then it names the owner, verifies the safe version, bumps the dependency on a branch, opens a real pull request, and writes its decision back into the graph so it remembers next time. Every step is a graph query you can read.</div>
 <div class="grid">
 <div class="kpi"><b>329 → 123 → 30</b><span>advisories in the lockfile → in packages the code actually calls → high/critical reachable from an endpoint (mealie demo)</span></div>
-<div class="kpi"><b>20 tools</b><span>every one a Cypher query or a FalkorDB algorithm, served to the agent over MCP</span></div>
+<div class="kpi"><b>21 tools</b><span>every one a Cypher query or a FalkorDB algorithm, served to the agent over MCP</span></div>
 <div class="kpi"><b>~40 s</b><span>from question to verdict, fix branch, pull request and recorded decision</span></div>
 <div class="kpi"><b>1 database</b><span>FalkorDB is the only store; remove it and nothing works</span></div>
 </div>
@@ -45,7 +45,7 @@ table{border-collapse:collapse;width:100%;margin:10px 0 16px;font-size:14px}th,t
 
 <h2 id="built"><small>Section 3</small>What we built (eight capabilities)</h2>
 <div class="card"><b>1. Code graph builder.</b> Point it at a repo (GitHub URL, subfolder link, zip, local folder). It parses Python (FastAPI, Flask, Django, DRF) and JavaScript/TypeScript (Express, Next.js, NestJS), reads the lockfile, asks OSV for advisories, runs git blame, detects ORM models, and loads everything into one FalkorDB graph. Mealie (78k lines) builds in about 30 seconds: 14,234 nodes and edges.</div>
-<div class="card"><b>2. The agent.</b> A Claude model in a tool-use loop. It is told the method (identify, reach, owners, fix, act, record) and may only state facts that came back from tools. It discovers the 20 tools from an MCP server and calls them; the tools run Cypher against FalkorDB.</div>
+<div class="card"><b>2. The agent.</b> A Claude model in a tool-use loop. It is told the method (identify, reach, owners, fix, act, record) and may only state facts that came back from tools. It discovers the 21 tools from an MCP server and calls them; the tools run Cypher against FalkorDB.</div>
 <div class="card"><b>3. Graph algorithms as tools.</b> Shortest attack paths (<code>algo.SPpaths</code>), choke points (<code>algo.betweenness</code> + <code>algo.pageRank</code>), blast radius (<code>algo.BFS</code>). These are FalkorDB procedures, not Python loops.</div>
 <div class="card"><b>4. Actions.</b> Plan the minimum safe version, verify it against OSV, bump it on a git branch (pyproject, requirements, package.json), open a pull request on a fork, and record the decision as a node in the graph.</div>
 <div class="card"><b>5. Live-deployment awareness.</b> Connect the running app: OpenAPI, GraphQL, or the compiled frontend bundles (read by the LLM). Endpoints learn whether they are deployed, whether they need login, and what parameters and payloads they take. Deployed, unauthenticated, reachable endpoints rank first.</div>
@@ -88,15 +88,16 @@ ORDER BY hops</pre>
 <h3>Why a graph, not Postgres or a vector database?</h3>
 <p>Relational: reachability is a variable-depth recursive join, slow and awkward to write. Vector search: it finds <em>similar text</em>, not <em>what calls what</em>; it cannot prove a path exists. A property graph stores the relationships directly, and a path query is the native operation. The algorithms (shortest paths, betweenness, PageRank, BFS) come for free on the same data.</p>
 
-<h2 id="tools"><small>Section 6</small>The 20 tools, grouped</h2>
+<h2 id="tools"><small>Section 6</small>The 21 tools, grouped</h2>
 <p>All tools live in <code>agent/tools.py</code>. The MCP server (<code>agent/mcp_server.py</code>) exposes them; the agent discovers them at start and calls them by name. Each returns JSON plus a trace (the Cypher it ran, rows, milliseconds) and a graph fragment for the UI.</p>
 <table><tr><th>Group</th><th>Tool</th><th>In plain words</th></tr>
 <tr><td rowspan="3">Identify</td><td><code>list_vulnerabilities</code></td><td>which packages are vulnerable, and how much of our code uses each; or all advisories for one package</td></tr>
 <tr><td><code>find_vulnerability</code></td><td>look up one advisory by id or text</td></tr>
 <tr><td><code>past_decisions</code></td><td>what did we decide before (memory)</td></tr>
-<tr><td rowspan="3">Reach</td><td><code>reachability</code></td><td>the core multi-hop query: which endpoints reach code using the package, with hops and confidence</td></tr>
+<tr><td rowspan="4">Reach</td><td><code>reachability</code></td><td>the core multi-hop query: which endpoints reach code using the package, with hops and confidence</td></tr>
 <tr><td><code>transitive_exposure</code></td><td>for a package we do not import directly, who pulls it in (DEPENDS_ON chain)</td></tr>
 <tr><td><code>data_exposure</code></td><td>which database tables sit on the attack paths (data at risk)</td></tr>
+<tr><td><code>cross_repo_impact</code></td><td>FalkorDB multi-graph: the same package in every other analysed repository, with endpoints reaching it and earlier decisions</td></tr>
 <tr><td rowspan="3">Algorithms</td><td><code>shortest_attack_paths</code></td><td>algo.SPpaths: minimum-hop path from each public handler to the sink</td></tr>
 <tr><td><code>choke_points</code></td><td>algo.betweenness + pageRank: the one function where a guard protects the most endpoints</td></tr>
 <tr><td><code>impact_radius</code></td><td>algo.BFS: everything downstream of a function, and how many callers and endpoints are upstream</td></tr>
@@ -118,7 +119,7 @@ ORDER BY hops</pre>
 <tr><td><b>Cypher</b> (openCypher)</td><td>every tool and every UI query</td><td>path patterns are the natural language for "what reaches what"</td></tr>
 <tr><td><b>FalkorDB algorithms</b></td><td>SPpaths, betweenness, pageRank, BFS</td><td>rank attack paths and find choke points inside the database, no Python graph libraries</td></tr>
 <tr><td><b>Claude API</b> (claude-opus-5-5, adaptive thinking, tool use)</td><td>the agent's reasoning; also structured-output extraction of endpoints from frontend bundles</td><td>strong multi-step tool use; structured JSON output for the bundle reader</td></tr>
-<tr><td><b>MCP</b> (Model Context Protocol, stdio)</td><td>the agent discovers and calls the 20 tools through a standard server</td><td>tools are decoupled from the agent and reusable by any MCP client; Track 1 asks for tool selection through MCP</td></tr>
+<tr><td><b>MCP</b> (Model Context Protocol, stdio)</td><td>the agent discovers and calls the 21 tools through a standard server</td><td>tools are decoupled from the agent and reusable by any MCP client; Track 1 asks for tool selection through MCP</td></tr>
 <tr><td><b>Python AST</b></td><td>parse Python: files, classes, functions, calls, imports, route decorators, FastAPI Depends, Flask blueprints, Django URL tables</td><td>exact, no runtime needed</td></tr>
 <tr><td><b>tree-sitter</b></td><td>parse JavaScript/TypeScript: Express routers, Next.js file routes, NestJS decorators</td><td>fast, tolerant parser for JS/TS</td></tr>
 <tr><td><b>OSV.dev API</b></td><td>advisories per package version (PyPI and npm), fixed versions, verification of proposed versions</td><td>public, free, authoritative, batch API</td></tr>
@@ -186,7 +187,7 @@ ORDER BY hops</pre>
 <h2 id="qa"><small>Section 14</small>Questions judges will ask, and short answers</h2>
 <p class="q">Why FalkorDB and not SQL or a vector store?</p><p class="a">Reachability is a variable-depth path question. In a property graph that is one Cypher pattern returning in milliseconds; in SQL it is a recursive join; a vector store finds similar text, not a proven path. And the algorithms run on the same data.</p>
 <p class="q">Where is the multi-hop reasoning?</p><p class="a">Advisory → package → function → up to six calls → handler → endpoint, plus function → author and function → table. Four to six hops per answer, in one query, then ranked by algorithms.</p>
-<p class="q">Where is MCP?</p><p class="a"><code>agent/mcp_server.py</code> serves all 20 tools over stdio; the agent lists them at start and calls them by name through <code>agent/mcp_bridge.py</code>. The step cards show the MCP request and response. <code>BLAST_TOOLS=direct</code> bypasses it for comparison.</p>
+<p class="q">Where is MCP?</p><p class="a"><code>agent/mcp_server.py</code> serves all 21 tools over stdio; the agent lists them at start and calls them by name through <code>agent/mcp_bridge.py</code>. The step cards show the MCP request and response. <code>BLAST_TOOLS=direct</code> bypasses it for comparison.</p>
 <p class="q">How do you stop the model inventing endpoints?</p><p class="a">The system prompt forbids stating anything not returned by a tool; every claim in the answer is traceable to a step card with its query and rows. Confidence is quoted from the graph (how each call was resolved).</p>
 <p class="q">What does the agent actually change?</p><p class="a">A git branch with the dependency bump, a pull request on the fork with impact, endpoints, path and owners in the body, and Decision nodes on the graph. Nothing is pushed to the upstream project.</p>
 <p class="q">Is the live-app connection safe and allowed?</p><p class="a">It reads only public documents and public JavaScript; no login, no credentials, no probing unless the operator explicitly asserts authorization to one tool. Only paths, methods, auth flags and parameter names are stored.</p>
@@ -202,7 +203,7 @@ ORDER BY hops</pre>
 <pre>ingest/   parse_python.py, parse_js.py  code → files, functions, calls, routes
           deps.py (lockfiles + OSV), git_history.py (blame), models.py (ORM tables)
           discover.py + llm_extract.py (live app: spec, GraphQL, bundles, LLM), load.py, run.py
-agent/    tools.py (20 tools), loop.py (Claude tool-use loop + system prompt),
+agent/    tools.py (21 tools), loop.py (Claude tool-use loop + system prompt),
           mcp_server.py + mcp_bridge.py (MCP), cli.py
 server/   app.py (FastAPI: analyze, discover, ask, graph, endpoint, report), report.py, replay.py
 web/      index.html (the console), vendor/ (cytoscape, marked)

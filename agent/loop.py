@@ -24,6 +24,7 @@ Method (follow in order, skip steps that are clearly unnecessary):
    If asked about data impact, or when the sink functions touch persistence, call data_exposure(package=...) to name the tables at risk.
    probe_endpoints only when the user explicitly says they own/are authorized to test the deployment; never otherwise.
    Then use the graph algorithms: shortest_attack_paths(package) for the exact attack path to quote, and choke_points(package) to find the one function where a guard protects the most endpoints (mention it in the fix section). impact_radius(function) when asked what a function change or compromise would affect.
+2b. Portfolio: if other repositories have been analysed, call cross_repo_impact(package) once and add a short 'Other repositories' line to the answer (which repos carry the same package, how many endpoints reach it there, what was decided before). Skip it when it returns no other repos.
 3. Narrow by vulnerability semantics: read the vulnerability details (e.g. image decoding -> only endpoints that accept images; multipart -> upload/form endpoints; JWT -> auth paths). Use get_function on the sink to confirm the vulnerable API is actually called.
 4. Ownership: who_owns on the key sink function or file.
 5. Fix: plan_fix -> verify_fix -> apply_dependency_fix. Then open_pull_request with a markdown body (impact, endpoints, path, owners, fix). Then record_triage_decision.
@@ -51,11 +52,11 @@ Repository under analysis: {repo}. GitHub PRs {gh}."""
 
 
 PHASE = {"data_exposure": "reach", "probe_endpoints": "reach", "live_app_status": "identify", "shortest_attack_paths": "reach", "choke_points": "reach", "impact_radius": "reach", "list_vulnerabilities": "identify", "find_vulnerability": "identify", "past_decisions": "identify",
-         "reachability": "reach", "transitive_exposure": "reach", "get_function": "reach", "search_code": "reach", "run_cypher": "reach",
+         "reachability": "reach", "transitive_exposure": "reach", "cross_repo_impact": "reach", "get_function": "reach", "search_code": "reach", "run_cypher": "reach",
          "who_owns": "owners", "plan_fix": "fix", "verify_fix": "fix", "apply_dependency_fix": "act", "open_pull_request": "act",
          "record_triage_decision": "record"}
 TITLE = {"data_exposure": "Data at risk", "probe_endpoints": "Probe live endpoints", "live_app_status": "Check the live deployment", "shortest_attack_paths": "Shortest attack paths to", "choke_points": "Find choke points for", "impact_radius": "Blast radius of", "list_vulnerabilities": "Scan vulnerable packages", "find_vulnerability": "Look up advisory", "past_decisions": "Check earlier decisions",
-         "reachability": "Trace endpoints that reach", "transitive_exposure": "Walk dependency chain for", "get_function": "Read function",
+         "reachability": "Trace endpoints that reach", "transitive_exposure": "Walk dependency chain for", "cross_repo_impact": "Check other analysed repos for", "get_function": "Read function",
          "search_code": "Search code for", "run_cypher": "Ad-hoc graph query", "who_owns": "Find owners of", "plan_fix": "Plan fix for",
          "verify_fix": "Verify fix with OSV", "apply_dependency_fix": "Bump dependency on a branch", "open_pull_request": "Open pull request",
          "record_triage_decision": "Record triage decision"}
@@ -87,6 +88,9 @@ def describe(name: str, args: dict, out: str) -> dict:
             m = o["matches"]; s = f"{len(m)} match(es)" + (f": {m[0]['id']} ({m[0]['severity']}) in {m[0]['package']} {m[0]['installed']}" if m else "")
         elif name == "reachability":
             s = f"{o['reachable_endpoints']} of {o['total_endpoints']} endpoints reach {len(o['sink_functions'])} function(s) using {o['package']}"
+        elif name == "cross_repo_impact":
+            aff = [r for r in o["repos"] if r.get("advisories")]
+            s = (f"{len(aff)} of {o['other_repos_analysed']} other analysed repos carry vulnerable {o['package']}: " + ", ".join(f"{r['graph']} ({r['version']}, {r['endpoints_reaching']} endpoints reach it)" for r in aff[:4])) if aff else f"none of the {o['other_repos_analysed']} other analysed repos carries vulnerable {o['package']}"
         elif name == "transitive_exposure":
             s = f"depended on by {', '.join(p['parent'] for p in o['depended_on_by'][:4]) or 'nothing'}; {o.get('files_importing_directly', 0)} files import it directly"
         elif name == "who_owns":

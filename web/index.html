@@ -117,6 +117,11 @@
   #epcard ul { margin:0; padding-left:16px; } #epcard li { margin:1px 0; }
   #epcard .x { position:absolute; top:8px; right:10px; cursor:pointer; color:var(--muted); font-size:16px; }
   #epcard button.ask { margin-top:10px; width:100%; }
+  .decisions { margin:10px 0 14px; } .decisions h4 { margin:0 0 6px; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .dec { display:flex; gap:10px; align-items:flex-start; padding:7px 8px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; background:var(--panel); animation:fadeUp .35s ease both; }
+  .dec .st { font-size:10px; font-weight:700; letter-spacing:.06em; padding:2px 7px; border-radius:6px; background:#1a2333; color:#cbd5e1; white-space:nowrap; margin-top:2px; }
+  .dec.bad .st { background:rgba(239,68,68,.18); color:#fca5a5; } .dec.good .st { background:rgba(52,211,153,.15); color:#6ee7b7; } .dec.warn .st { background:rgba(245,158,11,.18); color:#fcd34d; } .dec.muted .st { color:var(--muted); }
+  .dec .txt { font-size:12px; line-height:1.35; } .dec .txt b { display:block; color:var(--text); } .dec .txt span { color:var(--muted); } .dec .txt small { display:block; color:#64748b; font-size:10.5px; margin-top:2px; }
   .livecard .bad { color:#fca5a5; } .livecard .bad b { color:#f87171; }
   .msg .attn { border-left:3px solid #ef4444; background:rgba(239,68,68,.10); padding:4px 8px; margin:4px 0; border-radius:4px; color:#fecaca; }
   .msg tr.attn td { background:rgba(239,68,68,.12); color:#fecaca; }
@@ -148,7 +153,7 @@
     <div class="legend"><span><i style="background:var(--bad)"></i>Vulnerability</span><span><i style="background:var(--pkg)"></i>Package</span><span><i style="background:var(--fn)"></i>Function</span><span><i style="background:var(--ep)"></i>Endpoint</span><span><i style="background:var(--au)"></i>Author</span><span><i style="background:var(--dec)"></i>Decision</span><span><i style="background:#f472b6"></i>Table</span><span style="margin-left:auto">zoom in or hover to read endpoint names · click an endpoint for details · double-click to expand · dashed edge = name-matched call (medium confidence)</span></div>
   </section>
   <section>
-    <div class="title">How it got there <span class="right"><span id="mcpbadge" style="display:none;background:#1a2333;border:1px solid #2a3d57;border-radius:999px;padding:2px 8px;font-size:10px;letter-spacing:.08em;color:#c7d2fe">20 TOOLS VIA MCP</span><span id="stepcount"></span></span></div>
+    <div class="title">How it got there <span class="right"><span id="mcpbadge" style="display:none;background:#1a2333;border:1px solid #2a3d57;border-radius:999px;padding:2px 8px;font-size:10px;letter-spacing:.08em;color:#c7d2fe">21 TOOLS VIA MCP</span><span id="stepcount"></span></span></div>
     <div class="funnel" id="funnel"></div>
     <div id="trace"><div class="ov" id="overview"></div></div>
     <div class="usage"><span id="usage"></span><span id="elapsed"></span></div>
@@ -252,6 +257,13 @@ async function loadFunnel() {
   document.getElementById('funnel').innerHTML = fmtTile('Advisories in lockfile', f.advisories, 0, 0) + fmtTile('In packages the code calls', f.in_used_packages, f.advisories, 1) +
     fmtTile('High/critical reachable from an endpoint', f.reachable_high, f.advisories, 2) + fmtTile('Triaged by the agent, on the graph', f.triaged, f.in_used_packages, 3, 'good');
   requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('.funnel .meter i').forEach(b => b.style.width = b.dataset.w + '%'), 60));
+}
+async function loadDecisions(container) {
+  const r = await (await fetch('/api/decisions?limit=8')).json();
+  if (!r.total) { container.remove(); return; }
+  const col = { EXPLOITABLE: 'bad', FIX_PROPOSED: 'good', NOT_REACHABLE: 'muted', NEEDS_REVIEW: 'warn', MITIGATED: 'good' };
+  container.innerHTML = `<h4>Agent memory · ${r.total} decisions on this graph <span style="font-weight:400;color:var(--muted)">${r.summary.map(x => `${x.n} ${x.status.toLowerCase().replace('_', ' ')}`).join(' · ')}</span></h4>` +
+    r.decisions.map((d, i) => `<div class="dec ${col[d.status] || ''}" style="animation-delay:${i * 50}ms"><span class="st">${esc(d.status.replace('_', ' '))}</span><div class="txt"><b>${esc(d.package)} ${esc(d.version || '')} · ${esc(d.vuln)}</b><span>${esc((d.reason || '').slice(0, 140))}</span><small>${esc((d.decided_at || '').replace('T', ' ').slice(0, 16))}</small></div></div>`).join('');
 }
 async function loadFeed(container) {
   const r = await (await fetch('/api/feed?limit=6')).json();
@@ -437,6 +449,7 @@ async function refreshAll() {
     o.packages.filter(p => p.used > 0).map(p => `<tr><td><span class="pkgname">${esc(p.package)}</span> <span class="ver">${esc(p.version)}</span><div class="bar"><i data-w="${Math.round(100 * p.used / max)}"></i></div></td><td class="n">${p.used} functions</td><td class="n ${p.high ? 'hi' : ''}">${p.high} high</td><td class="n">${p.vulns} advisories</td></tr>`).join('') + '</table>';
   requestAnimationFrame(() => setTimeout(() => document.querySelectorAll('.ov .bar i').forEach(b => b.style.width = b.dataset.w + '%'), 50));
   const feed = document.createElement('div'); feed.className = 'feed'; ov.prepend(feed); loadFeed(feed);
+  const dec = document.createElement('div'); dec.className = 'decisions'; ov.prepend(dec); loadDecisions(dec);
   if (h.live) { const lc = document.createElement('div'); lc.className = 'livecard'; lc.innerHTML = `<div class="h"><span><i></i>${h.live.kind === 'live-only' ? 'Live app surface' : 'Live app connected'} · ${esc(h.live.url.replace(/^https?:\/\//, ''))}${h.live.framework && h.live.framework !== 'unknown' ? ' · ' + esc(h.live.framework) + ' frontend' : ''}</span><span style="color:var(--muted);font-weight:400">${esc(h.live.version || '')}</span></div><div class="row">${h.live.kind === 'live-only' ? `<span><b>${h.live.confirmed}</b> confirmed API calls</span><span><b>${h.live.route_strings}</b> route strings seen in the bundle</span>` : `<span><b>${h.live.live}</b> deployed endpoints</span>`}<span class="${h.live.live_unauth ? 'bad' : ''}"><b>${h.live.live_unauth}</b> callable without login</span>${h.live.auth_unknown ? `<span class="warn"><b>${h.live.auth_unknown}</b> auth status unknown</span>` : ''}<span class="${h.live.only_live ? 'warn' : ''}"><b>${h.live.only_live}</b> only in deployment</span><span class="${h.live.only_code ? 'warn' : ''}"><b>${h.live.only_code}</b> only in code</span></div>`; ov.prepend(lc); }
   loadFunnel();
   buildScenarios(h.graph, o.packages, h.live);

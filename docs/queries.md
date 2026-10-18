@@ -154,3 +154,32 @@ RETURN count(CASE WHEN e.live THEN 1 END) AS live,
        count(CASE WHEN e.live IS NULL AND e.router <> 'live' THEN 1 END) AS only_in_code,
        count(CASE WHEN e.live AND NOT coalesce(e.auth_required, false) THEN 1 END) AS live_unauthenticated
 ```
+
+## 13. Portfolio: one advisory across every analysed repository (FalkorDB multi-graph)
+
+`GRAPH.LIST` enumerates the graphs; for each repository graph the same two queries run (`cross_repo_impact` tool):
+
+```cypher
+MATCH (p:Package) WHERE toLower(p.name) = toLower($pkg)
+OPTIONAL MATCH (v:Vulnerability)-[:AFFECTS]->(p)
+OPTIONAL MATCH (f:Function)-[:USES]->(p)
+RETURN p.version, count(DISTINCT v) AS advisories, count(DISTINCT f) AS functions_using
+```
+
+```cypher
+MATCH (p:Package) WHERE toLower(p.name) = toLower($pkg)
+MATCH (p)<-[:USES]-(s:Function)
+MATCH (h:Function)-[:CALLS*0..5]->(s) WHERE (h)-[:EXPOSES]->()
+MATCH (h)-[:EXPOSES]->(e:Entrypoint)
+RETURN count(DISTINCT e) AS endpoints_reaching, collect(DISTINCT e.id)[0..5] AS sample
+```
+
+Result: for the package being triaged, every other repository that carries it, its version there, how many endpoints reach it and what was decided before. One graph per repository keeps each code base isolated while the agent can still answer "where else does this bite us".
+
+## 14. Agent memory view
+
+```cypher
+MATCH (v:Vulnerability)-[:TRIAGED]->(d:Decision) MATCH (v)-[a:AFFECTS]->(p:Package)
+RETURN d.status, d.reason, d.decided_at, v.id, v.severity, p.name, p.version, a.fixed_version
+ORDER BY d.decided_at DESC LIMIT 12
+```

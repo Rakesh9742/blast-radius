@@ -247,14 +247,24 @@ def apply_to_graph(graph_name: str, disc: dict) -> dict:
     for gq in disc["graphql"]:
         g.query("MERGE (e:Entrypoint {id: $id}) SET e.method = $m, e.path = $p, e.live = true, e.source = 'graphql', e.summary = $s", {"id": f"{gq['method']} {gq['path']}", "m": gq["method"], "p": gq["path"], "s": gq["summary"]})
     bundle_matched = 0
+    has_code = any(e.get("router") != "live" for e in code_eps)
+    bases = [u.rstrip("/") for u in disc.get("llm", {}).get("base_urls", []) if isinstance(u, str) and u.startswith("/") and len(u) > 1]
     for b in disc["bundle_paths"]:
         k = norm_path(b["path"])
-        hits = [e for (m, p), e in by_key.items() if p == k]
+        # the frontend often calls a relative path and prefixes the API base at runtime: try the base-prefixed form too
+        keys = [k] + [norm_path(base + b["path"]) for base in bases if not b["path"].startswith(base + "/")]
+        hits = [e for (m, p), e in by_key.items() if p in keys]
         if hits:
             bundle_matched += 1
-            g.query("UNWIND $ids AS id MATCH (e:Entrypoint {id: id}) SET e.frontend_calls = true", {"ids": [h["id"] for h in hits]})
-        elif b.get("source") == "bundle" and disc["endpoints"]:
-            continue  # a spec exists and this literal is not in it: a client-side page route, not an API call
+            if disc["endpoints"]:
+                g.query("UNWIND $ids AS id MATCH (e:Entrypoint {id: id}) SET e.frontend_calls = true", {"ids": [h["id"] for h in hits]})
+            else:
+                # no API document on this site: a code route the deployed frontend calls is confirmed live; auth stays unknown unless the LLM saw it
+                g.query("UNWIND $ids AS id MATCH (e:Entrypoint {id: id}) SET e.frontend_calls = true, e.live = true, e.source = coalesce(e.source, 'code+frontend'), "
+                        "e.auth_required = CASE WHEN e.auth_required IS NULL THEN (CASE $auth WHEN 'requires-auth' THEN true WHEN 'public' THEN false ELSE null END) ELSE e.auth_required END",
+                        {"ids": [h["id"] for h in hits], "auth": b.get("auth_hint", "unknown")})
+        elif b.get("source") == "bundle" and (disc["endpoints"] or has_code):
+            continue  # a spec or source code exists and this literal matches neither: a client-side page route, not an API call
         elif not any(norm_path(ep["path"]) == k for ep in disc["endpoints"]):
             # seen only in the frontend code: record it so surface-only sites (no OpenAPI) still get an endpoint inventory
             g.query("MERGE (e:Entrypoint {id: $id}) SET e.method = $m, e.path = $p, e.router = 'live', e.live = true, e.source = $src, e.summary = $s, e.frontend_calls = true, "

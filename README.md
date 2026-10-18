@@ -80,12 +80,14 @@ make cli Q="Pillow has new CVEs. What is exposed, who owns it, fix it."
 | Criterion | How |
 |---|---|
 | Multi-hop reasoning | `reachability` runs `(:Package)<-[:USES]-(:Function)<-[:CALLS*0..4]-(:Function)-[:EXPOSES]->(:Entrypoint)` and returns ranked paths with a confidence derived from how each call edge was resolved. `transitive_exposure` walks `DEPENDS_ON*1..3`. |
-| Graph queries and algorithms as agent tools | 20 tools; 9 are parameterised Cypher, 3 are FalkorDB graph algorithms (`algo.SPpaths`, `algo.betweenness` + `algo.pageRank`, `algo.BFS`), plus a read-only `run_cypher` escape hatch. |
-| Tool selection through MCP | All 20 tools are exposed by a Model Context Protocol server; the agent discovers and calls them over MCP. The same server plugs into Claude Desktop. |
+| Graph queries and algorithms as agent tools | 21 tools; 9 are parameterised Cypher, 3 are FalkorDB graph algorithms (`algo.SPpaths`, `algo.betweenness` + `algo.pageRank`, `algo.BFS`), plus a read-only `run_cypher` escape hatch. |
+| Tool selection through MCP | All 21 tools are exposed by a Model Context Protocol server; the agent discovers and calls them over MCP. The same server plugs into Claude Desktop. |
 | Explainable results | The trace panel lists every Cypher query, row count and latency per tool call. The evidence graph highlights exactly the nodes and edges the agent touched. Decisions are persisted as `(:Vulnerability)-[:TRIAGED]->(:Decision)`. |
 | Acts | `plan_fix` -> `verify_fix` (OSV) -> `apply_dependency_fix` (git branch + commit) -> `open_pull_request` (GitHub) or `write_triage_report` -> `record_triage_decision`. |
 
 ## Tools over MCP
+
+21 tools; the newest, `cross_repo_impact`, fans one package question across every analysed repository graph.
 
 Every tool the agent uses (20: graph queries, 3 FalkorDB algorithms, live-app status, data exposure, safe endpoint probes, actions) is served by `agent/mcp_server.py`, a Model Context Protocol server. The agent discovers the tool list from the server at start and calls tools through MCP (set `BLAST_TOOLS=direct` to bypass it). The same server works in Claude Desktop or Claude Code:
 
@@ -112,7 +114,7 @@ web/      index.html (chat | Cytoscape evidence graph | reasoning trace)
 
 ## FalkorDB features used
 
-Multi-graph (one graph per analysed repo or live site), variable-length path queries for reachability, `DEPENDS_ON` transitive closure, graph algorithms as agent tools (`algo.SPpaths` shortest attack paths, `algo.betweenness` + `algo.pageRank` choke points, `algo.BFS` blast radius), range indexes on every lookup key, full-text indexes on function source and advisory text, read-only query mode (`GRAPH.RO_QUERY`) for the agent's escape hatch, array properties for endpoint parameters and payload fields, and write-back of triage decisions so the graph is also the agent's memory.
+Multi-graph (one graph per analysed repo or live site), variable-length path queries for reachability, `DEPENDS_ON` transitive closure, graph algorithms as agent tools (`algo.SPpaths` shortest attack paths, `algo.betweenness` + `algo.pageRank` choke points, `algo.BFS` blast radius), range indexes on every lookup key, full-text indexes on function source and advisory text, read-only query mode (`GRAPH.RO_QUERY`) for the agent's escape hatch, array properties for endpoint parameters and payload fields, write-back of triage decisions so the graph is also the agent's memory, and a portfolio query that checks the same package across every analysed repository graph (`cross_repo_impact`).
 
 ## Data sources and licensing
 
@@ -120,6 +122,14 @@ Multi-graph (one graph per analysed repo or live site), variable-length path que
 - Advisories come from the public [OSV.dev](https://osv.dev) API. Package versions from the repo's own lockfile.
 - Ownership uses public commit metadata. Commit emails are **not stored**: authors are keyed by a short one-way hash; only the display name is kept.
 - Live-app discovery reads only what a browser receives anonymously: the public OpenAPI document, GraphQL introspection if the server allows it, and the public JavaScript bundles. Nothing behind a login is fetched, no credentials are used, and endpoints are never probed unless the operator explicitly asserts authorization to the `probe_endpoints` tool. Only endpoint paths, methods, auth flags and parameter names are stored, never response data.
+
+## Next steps
+
+- Runtime confirmation (OpenTelemetry traces or access logs) to turn "statically reachable" into "called in production".
+- A GitHub Action mode that triages every new advisory on push and comments on the pull request.
+- Type-aware call resolution for JavaScript/TypeScript to lift more call edges from medium to high confidence.
+- Go and Java parsers on the same graph model.
+- Cached tool results per graph revision so repeated questions cost cents.
 
 ## Timeline
 

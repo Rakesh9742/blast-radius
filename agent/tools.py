@@ -230,6 +230,46 @@ class GraphTools:
                 "api_areas_from_frontend": areas, "needs_attention_unknown_auth_sensitive_paths": sensitive,
                 "note": "only_in_live_app = deployed routes the analysed revision does not contain (code drift or unanalysed services); only_in_code = routes in the code that the deployment does not expose"}
 
+    def cross_repo_impact(self, package: str) -> dict:
+        """PORTFOLIO (FalkorDB multi-graph): the same package across every other analysed repository: installed version, advisories,
+        first-party functions using it and endpoints reaching it, so one advisory can be triaged across the whole estate."""
+        from core.db import get_db
+        db = get_db(); t = time.time(); repos = []; scanned = 0
+        for name in sorted(db.list_graphs()):
+            if name == self.graph_name:
+                continue
+            try:
+                g = db.select_graph(name)
+                meta = rows(g.ro_query("MATCH (r:Repo) RETURN r.url AS url, r.kind AS kind, r.language AS language LIMIT 1"))
+                if not meta or meta[0].get("kind") == "live-only":
+                    continue
+                scanned += 1
+                pk = rows(g.ro_query("MATCH (p:Package) WHERE toLower(p.name) = toLower($pkg) OPTIONAL MATCH (v:Vulnerability)-[:AFFECTS]->(p) "
+                                     "OPTIONAL MATCH (f:Function)-[:USES]->(p) RETURN p.version AS version, count(DISTINCT v) AS advisories, count(DISTINCT f) AS functions_using", {"pkg": package}))
+                if not pk:
+                    continue
+                eps = rows(g.ro_query("MATCH (p:Package) WHERE toLower(p.name) = toLower($pkg) MATCH (p)<-[:USES]-(s:Function) MATCH (h:Function)-[:CALLS*0..5]->(s) "
+                                      "MATCH (h)-[:EXPOSES]->(e:Entrypoint) WITH DISTINCT e RETURN count(e) AS n, collect(e.id)[0..5] AS sample", {"pkg": package}, timeout=5000))
+                dec = rows(g.ro_query("MATCH (v:Vulnerability)-[:AFFECTS]->(p:Package) WHERE toLower(p.name) = toLower($pkg) "
+                                      "MATCH (v)-[:TRIAGED]->(d:Decision) RETURN d.status AS status, count(*) AS n", {"pkg": package}))
+                repos.append({"graph": name, "url": meta[0]["url"], "language": meta[0].get("language"), "version": pk[0]["version"], "advisories": pk[0]["advisories"],
+                              "functions_using": pk[0]["functions_using"], "endpoints_reaching": eps[0]["n"] if eps else 0, "sample_endpoints": eps[0]["sample"] if eps else [],
+                              "decisions": {d["status"]: d["n"] for d in dec}})
+            except Exception as e:
+                repos.append({"graph": name, "error": str(e)[:120]})
+        repos.sort(key=lambda r: (-(r.get("endpoints_reaching") or 0), -(r.get("advisories") or 0)))
+        affected = [r for r in repos if r.get("advisories")]
+        self.trace.steps.append({"type": "cypher", "label": f"portfolio: {package} across {len(repos)} other graphs (FalkorDB multi-graph)",
+                                 "query": "GRAPH.LIST, then per graph: MATCH (p:Package {name}) OPTIONAL MATCH (v:Vulnerability)-[:AFFECTS]->(p) ... ; MATCH (p)<-[:USES]-(s)<-[:CALLS*0..5]-(h)-[:EXPOSES]->(e) RETURN count(DISTINCT e)",
+                                 "params": {"package": package}, "rows": len(repos), "ms": round((time.time() - t) * 1000, 1)})
+        frag = {"nodes": [self.node(f"pkg:{package}", "Package", package)], "edges": []}
+        for r in affected[:8]:
+            frag["nodes"].append(self.node(f"repo:{r['graph']}", "Repo", f"{r['graph']} ({r['endpoints_reaching']} eps)"))
+            frag["edges"].append(self.edge(f"repo:{r['graph']}", f"pkg:{package}", "DEPENDS_ON"))
+        self.trace.add_graph(frag)
+        return {"package": package, "other_repos_analysed": scanned, "repos_carrying_package": len(repos), "repos_with_advisories": len(affected), "repos": repos,
+                "note": "same advisory, every analysed repository: endpoints_reaching counts handlers that reach code using the package within 5 calls"}
+
     def data_exposure(self, table: str | None = None, package: str | None = None) -> dict:
         """Data layer: which tables/models exist, which endpoints reach functions that touch a table, and (optionally) whether the
         code paths from a vulnerable package also touch data (advisory -> package -> function -> table)."""
@@ -515,6 +555,8 @@ TOOL_DEFS = [
     {"name": "reachability", "description": "Core multi-hop query: find HTTP endpoints from which code using the given package is reachable (Entrypoint <- handler -CALLS*-> function -USES-> Package). Returns ranked endpoints with the call path and a confidence.",
      "input_schema": _schema({"package": {"type": "string"}, "max_hops": {"type": "integer"}}, ["package", "max_hops"])},
     {"name": "transitive_exposure", "description": "For a package not imported directly, find which packages depend on it (DEPENDS_ON chain) and how much first-party code uses those parents.",
+     "input_schema": _schema({"package": {"type": "string"}}, ["package"])},
+    {"name": "cross_repo_impact", "description": "PORTFOLIO (FalkorDB multi-graph): the same package in every other analysed repository: version, advisories, first-party functions using it, endpoints reaching it, earlier decisions. Call once per triage when more than one repository has been analysed.",
      "input_schema": _schema({"package": {"type": "string"}}, ["package"])},
     {"name": "who_owns", "description": "Ownership for a function qualname or file path: git-blame owners (lines, share, last touched) and recent commits.",
      "input_schema": _schema({"target": {"type": "string", "description": "function qualname like mealie.pkgs.img.minify.PillowMinifier.minify, or file path"}}, ["target"])},
