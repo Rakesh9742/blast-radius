@@ -227,11 +227,21 @@ def _ingest_stream(dest: pathlib.Path, graph_name: str, url: str, pre_msgs: list
             for a in SESSIONS.values():
                 a.close()
             SESSIONS.clear(); _FUNNEL.pop(graph_name, None)
-            if live_url:
+            host = (urlparse(live_url).hostname or "").lower() if live_url else ""
+            if live_url and host in ("github.com", "www.github.com", "gitlab.com", "bitbucket.org"):
+                say("detail", f"ignored live URL {live_url}: a code-hosting site is not this app's deployment")
+            elif live_url:
                 say("live", f"connecting live app {live_url} …")
                 try:
-                    d = discover(live_url); summ = apply_to_graph(graph_name, d)
-                    say("detail", f"live: {summ['live_endpoints']} endpoints, {summ['matched_to_code']} matched to code, {summ['only_live']} only deployed, {summ['only_in_code']} only in code")
+                    d = discover(live_url)
+                    gg = get_graph(graph_name)
+                    code_paths = {norm_path(r["path"]) for r in rows(gg.ro_query("MATCH (e:Entrypoint) WHERE coalesce(e.router, '') <> 'live' RETURN e.path AS path"))}
+                    site_paths = {norm_path(e["path"]) for e in d["endpoints"]} | {norm_path(b["path"]) for b in d["bundle_paths"]}
+                    if code_paths and site_paths and not (code_paths & site_paths):
+                        say("detail", f"live URL {host} does not match this code (0 of {len(site_paths)} paths): not merged. Analyse it on its own to get a surface graph.")
+                    else:
+                        summ = apply_to_graph(graph_name, d)
+                        say("detail", f"live: {summ['live_endpoints']} endpoints, {summ['matched_to_code']} matched to code, {summ['only_live']} only deployed, {summ['only_in_code']} only in code")
                 except Exception as e:
                     say("detail", f"live app discovery failed: {e}")
             g = get_graph(graph_name)

@@ -175,8 +175,12 @@ function buildScenarios(graphName, packages, live) {
     SCENARIOS.push(['Data-changing calls', `List every confirmed POST, PUT, PATCH and DELETE call of ${host} with its auth status and known payload fields. Which ones could change or delete important data, and which of those have a public or unknown auth status?`]);
   }
   else {
-    const top = packages.filter(p => p.used > 0 && p.vulns > 0).slice(0, 4);
-    SCENARIOS = top.map(p => [`${p.package} advisories`, `${p.package} ${p.version} in our lockfile has ${p.vulns} published advisories. Which of our HTTP endpoints are actually exposed, who owns that code, and apply the fix.`]);
+    const used = packages.filter(p => p.used > 0 && p.vulns > 0);
+    const transitive = packages.filter(p => p.used === 0 && p.vulns > 0).sort((a, b) => (b.high || 0) - (a.high || 0) || b.vulns - a.vulns);
+    const top = used.concat(transitive).slice(0, 4);
+    SCENARIOS = top.map(p => p.used > 0
+      ? [`${p.package} advisories`, `${p.package} ${p.version} in our lockfile has ${p.vulns} published advisories. Which of our HTTP endpoints are actually exposed, who owns that code, and apply the fix.`]
+      : [`${p.package} (transitive)`, `${p.package} ${p.version} in our lockfile has ${p.vulns} published advisories but no first-party code imports it directly. Which package pulls it in, does that framework layer process requests for our endpoints, is the vulnerable behaviour reachable, who owns the entry points, and if an upgrade is safe apply it.`]);
     SCENARIOS.push(['Prioritise everything', 'Give me a prioritized overview: which vulnerable packages are actually used by our code, ranked by reachable endpoints.']);
   }
   const box = document.getElementById('scenarios'); box.innerHTML = '';
