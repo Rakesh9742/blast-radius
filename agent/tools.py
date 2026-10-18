@@ -432,8 +432,14 @@ class GraphTools:
         git("add", *changed); git("-c", "user.name=Blast Radius", "-c", "user.email=blast-radius@example.com", "commit", "-q", "-m", msg)
         sha = git("rev-parse", "--short", "HEAD").stdout.strip()
         self.trace.steps.append({"type": "action", "label": f"git branch {branch} @ {sha} ({', '.join(changed)})", "rows": 1, "ms": 0})
-        note = "" if "package-lock.json" in changed else (("package-lock.json must be regenerated in CI (`npm install`); this change updates the declared range." if any(f.endswith("package.json") for f in changed))
-                else "poetry.lock / uv.lock must be regenerated in CI (`poetry lock` / `uv lock`); this change updates the declared constraint." if any(f.endswith("pyproject.toml") for f in changed) else "pinned requirements updated directly.")
+        if "package-lock.json" in changed:
+            note = ""   # the override path already refreshed the lockfile
+        elif any(f.endswith("package.json") for f in changed):
+            note = "package-lock.json must be regenerated in CI (`npm install`); this change updates the declared range."
+        elif any(f.endswith("pyproject.toml") for f in changed):
+            note = "poetry.lock / uv.lock must be regenerated in CI (`poetry lock` / `uv lock`); this change updates the declared constraint."
+        else:
+            note = "pinned requirements updated directly."
         return {"branch": branch, "commit": sha, "files_changed": changed, "diff": diff, "lockfile_note": note}
 
     def open_pull_request(self, title: str, body: str) -> dict:
